@@ -5,15 +5,14 @@ plugins {
     kotlin("plugin.serialization")
     id("com.google.devtools.ksp")
     id("dagger.hilt.android.plugin")
-    id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.teka.angaahewa"
+    namespace = "com.teka.rufaa"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.teka.angaahewa"
+        applicationId = "com.teka.rufaa"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -121,23 +120,4 @@ dependencies {
 
     //reflection
     implementation(libs.kotlin.reflect)
-
-
-
-    implementation("com.halilibo.compose-richtext:richtext-ui:0.17.0")
-    implementation("com.halilibo.compose-richtext:richtext-ui-material3:0.17.0")
-    implementation("com.halilibo.compose-richtext:richtext-commonmark:0.17.0")
-
-
-    // Firebase platform
-    implementation(platform("com.google.firebase:firebase-bom:34.2.0"))
-    implementation("com.google.firebase:firebase-ai")
-    implementation("com.google.firebase:firebase-vertexai:16.5.0")
-    implementation("com.google.firebase:firebase-analytics")
-
-    implementation("com.google.android.gms:play-services-location:21.0.1")
-
-    implementation("io.coil-kt.coil3:coil-compose:3.3.0")
-    implementation("io.coil-kt.coil3:coil-network-okhttp:3.3.0")
-
 }
