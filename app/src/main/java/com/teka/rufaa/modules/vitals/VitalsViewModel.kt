@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.teka.rufaa.data_layer.api.AppEndpoints
 import com.teka.rufaa.data_layer.api.RetrofitProvider
+import com.teka.rufaa.data_layer.persistence.room.VitalsDao
+import com.teka.rufaa.data_layer.persistence.room.entities.Vitals
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -75,7 +77,8 @@ enum class AssessmentRoute {
 
 @HiltViewModel
 class VitalsViewModel @Inject constructor(
-    private val appContext: Context
+    private val appContext: Context,
+    private val vitalsDao: VitalsDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VitalsUiState())
@@ -209,120 +212,184 @@ class VitalsViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                val apiService = RetrofitProvider.simpleApiService(appContext)
-
                 // Format BMI to 1 decimal place
                 val bmiValue = _uiState.value.calculatedBmi?.let {
                     String.format("%.1f", it)
                 } ?: "0.0"
 
-                val request = VitalsRequest(
-                    visit_date = visitDate,
+                // Step 1: Save to local database first
+                val vitalsEntity = Vitals(
+                    patientId = patientId.trim(),
+                    visitDate = visitDate,
                     height = height.trim(),
                     weight = weight.trim(),
                     bmi = bmiValue,
-                    patient_id = patientId.trim()
+                    bmiCategory = getBmiCategoryText(),
+                    isSynced = false
                 )
 
-                val requestBody = json.encodeToString(
-                    VitalsRequest.serializer(),
-                    request
-                ).toRequestBody("application/json".toMediaType())
+                vitalsDao.insert(vitalsEntity)
+                Timber.tag("VitalsVM").i("Vitals saved to local database")
 
-                val response = apiService.post(
-                    url = AppEndpoints.VITALS_ADD,
-                    body = requestBody
-                )
+                // Step 2: Attempt to sync with backend
+                syncVitalsToBackend(vitalsEntity)
 
-                Timber.tag("VitalsVM").i("Response: $response")
+            } catch (e: Exception) {
+                Timber.tag("VitalsVM").e("Exception during local save: ${e.localizedMessage}")
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Failed to save vitals locally: ${e.localizedMessage}"
+                    )
+                }
+            }
+        }
+    }
 
-                if (response.isSuccessful) {
-                    val responseBody = response.body()?.string()
-                    Timber.tag("VitalsVM").i("Response Body: $responseBody")
+    private suspend fun syncVitalsToBackend(vitals: Vitals) {
+        try {
+            val apiService = RetrofitProvider.simpleApiService(appContext)
 
-                    if (responseBody != null) {
-                        val vitalsResponse = json.decodeFromString<VitalsResponseDto>(responseBody)
+            val request = VitalsRequest(
+                visit_date = vitals.visitDate,
+                height = vitals.height,
+                weight = vitals.weight,
+                bmi = vitals.bmi,
+                patient_id = vitals.patientId
+            )
 
-                        if (vitalsResponse.success) {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    successMessage = vitalsResponse.data.message,
-                                    vitalsSuccess = true
-                                )
-                            }
-                        } else {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    errorMessage = vitalsResponse.message
-                                )
-                            }
-                        }
-                    } else {
+            val requestBody = json.encodeToString(
+                VitalsRequest.serializer(),
+                request
+            ).toRequestBody("application/json".toMediaType())
+
+            val response = apiService.post(
+                url = AppEndpoints.VITALS_ADD,
+                body = requestBody
+            )
+
+            Timber.tag("VitalsVM").i("Backend Response Code: ${response.code()}")
+
+            if (response.isSuccessful) {
+                val responseBody = response.body()?.string()
+                Timber.tag("VitalsVM").i("Response Body: $responseBody")
+
+                if (responseBody != null) {
+                    val vitalsResponse = json.decodeFromString<VitalsResponseDto>(responseBody)
+
+                    if (vitalsResponse.success) {
+                        // Update local record as synced
+                        vitalsDao.markAsSynced(vitals.id, vitalsResponse.data.id)
+                        Timber.tag("VitalsVM").i("Vitals synced successfully with server")
+
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
-                                errorMessage = "Empty response from server"
+                                successMessage = vitalsResponse.data.message,
+                                vitalsSuccess = true
+                            )
+                        }
+                    } else {
+                        // Mark sync error but data is saved locally
+                        vitalsDao.updateSyncError(vitals.id, vitalsResponse.message)
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                successMessage = "Vitals saved locally. Sync failed: ${vitalsResponse.message}",
+                                vitalsSuccess = true
                             )
                         }
                     }
                 } else {
-                    val errorBody = response.errorBody()?.string()
-                    Timber.tag("VitalsVM").e("Error: $errorBody")
+                    vitalsDao.updateSyncError(vitals.id, "Empty response from server")
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            successMessage = "Vitals saved locally. Will sync later.",
+                            vitalsSuccess = true
+                        )
+                    }
+                }
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Timber.tag("VitalsVM").e("Sync Error: $errorBody")
 
-                    // Handle validation errors
-                    if (response.code() == 422 && errorBody != null) {
-                        try {
-                            val validationError = json.decodeFromString<ValidationErrorResponse>(errorBody)
-                            val fieldErrors = validationError.errors.mapValues { entry ->
-                                entry.value.firstOrNull() ?: "Invalid value"
-                            }
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    validationErrors = fieldErrors,
-                                    errorMessage = validationError.message
-                                )
-                            }
-                        } catch (e: Exception) {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    errorMessage = errorBody
-                                )
-                            }
+                // Handle validation errors
+                if (response.code() == 422 && errorBody != null) {
+                    try {
+                        val validationError = json.decodeFromString<ValidationErrorResponse>(errorBody)
+                        vitalsDao.updateSyncError(vitals.id, validationError.message)
+
+                        val fieldErrors = validationError.errors.mapValues { entry ->
+                            entry.value.firstOrNull() ?: "Invalid value"
                         }
-                    } else {
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
-                                errorMessage = errorBody ?: "Failed to submit vitals"
+                                validationErrors = fieldErrors,
+                                errorMessage = "Vitals saved locally but sync failed: ${validationError.message}"
                             )
                         }
-
-                        when (response.code()) {
-                            401 -> {
-                                Timber.tag("VitalsVM").i("Unauthorized: Please login again")
-                            }
-                            503 -> {
-                                Timber.tag("VitalsVM").i("Service Unavailable: No internet connection")
-                            }
-                            else -> {
-                                Timber.tag("VitalsVM").e("HTTP error: ${response.code()}")
-                            }
+                    } catch (e: Exception) {
+                        vitalsDao.updateSyncError(vitals.id, errorBody)
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                successMessage = "Vitals saved locally. Will retry sync later.",
+                                vitalsSuccess = true
+                            )
                         }
                     }
-                }
+                } else {
+                    // Save error but allow continuation since data is saved locally
+                    val errorMsg = when (response.code()) {
+                        401 -> "Unauthorized - Please login again"
+                        503 -> "Service unavailable - No internet connection"
+                        else -> errorBody ?: "Network error"
+                    }
 
-            } catch (e: Exception) {
-                Timber.tag("VitalsVM").e("Exception: ${e.localizedMessage}")
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "Failed to submit vitals: ${e.localizedMessage}"
-                    )
+                    vitalsDao.updateSyncError(vitals.id, errorMsg)
+                    Timber.tag("VitalsVM").w("Sync failed: $errorMsg. Data saved locally.")
+
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            successMessage = "Vitals saved locally. Will sync when online.",
+                            vitalsSuccess = true
+                        )
+                    }
                 }
+            }
+
+        } catch (e: Exception) {
+            Timber.tag("VitalsVM").e("Backend sync exception: ${e.localizedMessage}")
+            vitalsDao.updateSyncError(vitals.id, e.localizedMessage)
+
+            // Data is saved locally, so we still consider it a success
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    successMessage = "Vitals saved locally. Will sync when connection is available.",
+                    vitalsSuccess = true
+                )
+            }
+        }
+    }
+
+    /**
+     * Manually sync unsynced vitals
+     */
+    fun syncUnsyncedVitals() {
+        viewModelScope.launch {
+            try {
+                val unsyncedVitals = vitalsDao.getUnsyncedVitals()
+                Timber.tag("VitalsVM").i("Found ${unsyncedVitals.size} unsynced vitals")
+
+                unsyncedVitals.forEach { vitals ->
+                    syncVitalsToBackend(vitals)
+                }
+            } catch (e: Exception) {
+                Timber.tag("VitalsVM").e("Error syncing unsynced vitals: ${e.localizedMessage}")
             }
         }
     }
