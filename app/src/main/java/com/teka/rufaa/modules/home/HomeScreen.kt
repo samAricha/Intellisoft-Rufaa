@@ -1,9 +1,11 @@
 package com.teka.rufaa.modules.home
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -14,7 +16,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -23,6 +27,7 @@ import androidx.navigation.NavController
 import com.teka.rufaa.core.navigation.AppScreens
 import com.teka.rufaa.utils.offline_sync_utils.SyncStatusBanner
 import com.teka.rufaa.utils.offline_sync_utils.SyncStatus
+import com.teka.rufaa.R
 
 /**
  * Home screen composable - Main navigation hub for the app
@@ -221,20 +226,31 @@ fun HomeTopBar(userName: String, currentDate: String) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(24.dp)
+                .padding(top = 16.dp)
         ) {
             // App Title
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.LocalHospital,
-                    contentDescription = "App Logo",
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .background(
+                            color = Color.White,
+                            shape = CircleShape
+                        )
+                        .padding(0.5.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.rufaa_logo),
+                        contentDescription = "App Logo",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = "Patient Care",
+                    text = "Rufaa Care",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
