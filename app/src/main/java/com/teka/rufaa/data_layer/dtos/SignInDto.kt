@@ -1,7 +1,10 @@
 package com.teka.rufaa.data_layer.dtos
 
+import kotlinx.serialization.Serializable
+
+
+@Serializable
 data class SignInDto(
-    val mobile: String,
-    val password: String,
-    val category: String
+    val email: String,
+    val password: String
 )

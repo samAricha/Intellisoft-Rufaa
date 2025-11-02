@@ -31,88 +31,113 @@ class DataStoreRepository(context: Context) {
     private val onBoardingDataStore = context.onBoardingDataStore
     private val loggedInDataStore = context.loggedInDataStore
 
-
-
-
     private object PreferencesKey {
-        val USER_TOKEN_KEY = stringPreferencesKey(name ="user_token")
+        val USER_TOKEN_KEY = stringPreferencesKey(name = "user_token")
         val onBoardingKey = booleanPreferencesKey(name = "on_boarding_completed")
         val isLoggedInKey = booleanPreferencesKey(name = "is_logged_in")
         val BASE_URL = stringPreferencesKey(name = "base_url")
     }
 
     private object UserPreferencesKey {
-        val USER_TOKEN_KEY = stringPreferencesKey("user_token")
-        val ROLE_ID = intPreferencesKey("role_id")
-        val LOCAL_PASSWORD = stringPreferencesKey("local_password")
-        val BRANCH_ID = stringPreferencesKey("branch_id")
         val USER_ID = longPreferencesKey("user_id")
         val USER_NAME = stringPreferencesKey("user_name")
-        val MOBILE = stringPreferencesKey("mobile")
-        val CATEGORY = stringPreferencesKey("category")
-
+        val EMAIL = stringPreferencesKey("email")
+        val ACCESS_TOKEN = stringPreferencesKey("access_token")
+        val CREATED_AT = stringPreferencesKey("created_at")
+        val UPDATED_AT = stringPreferencesKey("updated_at")
+        val LOCAL_PASSWORD = stringPreferencesKey("local_password")
+        val ROLE_ID = intPreferencesKey("role_id")
     }
 
+    // Save logged in user data from new API
     suspend fun saveLoggedInUserData(userData: UserData) {
         loggedInDataStore.edit { preferences ->
-            preferences[UserPreferencesKey.USER_ID] = userData.userID
-            preferences[UserPreferencesKey.USER_NAME] = userData.user_name
-            preferences[UserPreferencesKey.MOBILE] = userData.mobile
-            preferences[UserPreferencesKey.CATEGORY] = userData.category
-            preferences[UserPreferencesKey.BRANCH_ID] = userData.branch_id.toString()
-            preferences[UserPreferencesKey.LOCAL_PASSWORD] = userData.password
+            preferences[UserPreferencesKey.USER_ID] = userData.id.toLong()
+            preferences[UserPreferencesKey.USER_NAME] = userData.name
+            preferences[UserPreferencesKey.EMAIL] = userData.email
+            preferences[UserPreferencesKey.ACCESS_TOKEN] = userData.access_token
+            preferences[UserPreferencesKey.CREATED_AT] = userData.created_at
+            preferences[UserPreferencesKey.UPDATED_AT] = userData.updated_at
+            // Set logged in state to true when saving user data
+            preferences[PreferencesKey.isLoggedInKey] = true
+        }
+
+        Timber.tag(DS_REPOSITORY_TAG).i("Saved user data: ${userData.name}, ID: ${userData.id}")
+    }
+
+    // Get logged in user data
+    fun getLoggedInUserData(): Flow<UserData?> = loggedInDataStore.data.map { preferences ->
+        val userId = preferences[UserPreferencesKey.USER_ID]
+        if (userId != null) {
+            UserData(
+                id = userId.toInt(),
+                name = preferences[UserPreferencesKey.USER_NAME] ?: "",
+                email = preferences[UserPreferencesKey.EMAIL] ?: "",
+                access_token = preferences[UserPreferencesKey.ACCESS_TOKEN] ?: "",
+                created_at = preferences[UserPreferencesKey.CREATED_AT] ?: "",
+                updated_at = preferences[UserPreferencesKey.UPDATED_AT] ?: ""
+            )
+        } else {
+            null
         }
     }
 
+    // Clear all user data (logout)
     suspend fun clearUserData() {
         loggedInDataStore.edit { preferences ->
             preferences.remove(UserPreferencesKey.USER_ID)
-            preferences.remove(UserPreferencesKey.LOCAL_PASSWORD)
             preferences.remove(UserPreferencesKey.USER_NAME)
-            preferences.remove(UserPreferencesKey.BRANCH_ID)
-            preferences.remove(UserPreferencesKey.MOBILE)
-            preferences.remove(UserPreferencesKey.CATEGORY)
+            preferences.remove(UserPreferencesKey.EMAIL)
+            preferences.remove(UserPreferencesKey.ACCESS_TOKEN)
+            preferences.remove(UserPreferencesKey.CREATED_AT)
+            preferences.remove(UserPreferencesKey.UPDATED_AT)
+            preferences.remove(UserPreferencesKey.LOCAL_PASSWORD)
             preferences.remove(UserPreferencesKey.ROLE_ID)
-
+            preferences.remove(PreferencesKey.isLoggedInKey)
         }
+
+        Timber.tag(DS_REPOSITORY_TAG).i("Cleared all user data")
     }
 
-
+    // Check if user is logged in
     val isUserLoggedIn: Flow<Boolean> = loggedInDataStore.data
         .map { preferences ->
-            val userID = preferences[UserPreferencesKey.USER_ID]
-            val branchID = preferences[UserPreferencesKey.BRANCH_ID]
-            userID != null && branchID != null
+            val userId = preferences[UserPreferencesKey.USER_ID]
+            val accessToken = preferences[UserPreferencesKey.ACCESS_TOKEN]
+            val isLoggedIn = preferences[PreferencesKey.isLoggedInKey] ?: false
+
+            // User is logged in if they have a valid user ID, access token, and logged in flag is true
+            userId != null && accessToken != null && isLoggedIn
         }
 
-    fun getLoggedInUserData(): Flow<UserData?> = loggedInDataStore.data.map { preferences ->
-        UserData(
-            userID = preferences[UserPreferencesKey.USER_ID] ?: 0L,
-            password = preferences[UserPreferencesKey.LOCAL_PASSWORD] ?: "",
-            user_name = preferences[UserPreferencesKey.USER_NAME] ?: "",
-            branch_id = preferences[UserPreferencesKey.BRANCH_ID]?.toLong() ?: 0L,
-            mobile = preferences[UserPreferencesKey.MOBILE] ?: "",
-            category = preferences[UserPreferencesKey.CATEGORY] ?: "",
-            manager_id = "",
-            loader_id = "",
-            agent_id = "",
-            staff_id = preferences[UserPreferencesKey.USER_ID] ?: 0L
-        )
+    // Get access token
+    val getAccessToken: Flow<String> = loggedInDataStore.data.map { preferences ->
+        preferences[UserPreferencesKey.ACCESS_TOKEN] ?: ""
     }
 
+    // Get user ID
+    fun getUserId(): Flow<Int?> = loggedInDataStore.data.map { preferences ->
+        preferences[UserPreferencesKey.USER_ID]?.toInt()
+    }
 
+    // Get user name
+    fun getUserName(): Flow<String?> = loggedInDataStore.data.map { preferences ->
+        preferences[UserPreferencesKey.USER_NAME]
+    }
+
+    // Get user email
+    fun getUserEmail(): Flow<String?> = loggedInDataStore.data.map { preferences ->
+        preferences[UserPreferencesKey.EMAIL]
+    }
+
+    // Legacy method support (if needed for other parts of the app)
     suspend fun saveUserData(userData: LoggedInUser) {
         loggedInDataStore.edit { preferences ->
             preferences[UserPreferencesKey.ROLE_ID] = userData.roles.first().id
         }
     }
 
-    suspend fun getSavedBranchId(): String? {
-        val preferences = loggedInDataStore.data.first()
-        return preferences[UserPreferencesKey.BRANCH_ID]
-    }
-
-
+    // Base URL management
     suspend fun saveBaseUrl(url: String) {
         loggedInDataStore.edit { preferences ->
             preferences[PreferencesKey.BASE_URL] = url
@@ -129,19 +154,9 @@ class DataStoreRepository(context: Context) {
         preferences[PreferencesKey.BASE_URL] ?: ""
     }
 
-
-    val getAccessToken: Flow<String> = loggedInDataStore.data.map { preferences ->
-        preferences[PreferencesKey.USER_TOKEN_KEY] ?: ""
-    }
-
+    // Role ID management
     val readLoggedInUserRoleId: Flow<Int> = loggedInDataStore.data.map { preferences ->
         preferences[UserPreferencesKey.ROLE_ID] ?: 0
-    }
-
-    suspend fun saveToken(token: String) {
-        loggedInDataStore.edit { preferences ->
-            preferences[PreferencesKey.USER_TOKEN_KEY] = token
-        }
     }
 
     suspend fun saveRoleId(roleId: Int) {
@@ -150,17 +165,17 @@ class DataStoreRepository(context: Context) {
         }
     }
 
-
-
-    suspend fun saveOnBoardingState(completed: Boolean) {
-        onBoardingDataStore.edit { preferences ->
-            preferences[PreferencesKey.onBoardingKey] = completed
+    // Token management (legacy support)
+    suspend fun saveToken(token: String) {
+        loggedInDataStore.edit { preferences ->
+            preferences[PreferencesKey.USER_TOKEN_KEY] = token
         }
     }
 
-    suspend fun saveLoggedInState(isLoggedIn: Boolean) {
-        loggedInDataStore.edit { preferences ->
-            preferences[PreferencesKey.isLoggedInKey] = isLoggedIn
+    // OnBoarding state management
+    suspend fun saveOnBoardingState(completed: Boolean) {
+        onBoardingDataStore.edit { preferences ->
+            preferences[PreferencesKey.onBoardingKey] = completed
         }
     }
 
@@ -179,6 +194,12 @@ class DataStoreRepository(context: Context) {
             }
     }
 
+    // Logged in state management
+    suspend fun saveLoggedInState(isLoggedIn: Boolean) {
+        loggedInDataStore.edit { preferences ->
+            preferences[PreferencesKey.isLoggedInKey] = isLoggedIn
+        }
+    }
 
     fun readLoggedInState(): Flow<Boolean> {
         return loggedInDataStore.data
@@ -195,4 +216,20 @@ class DataStoreRepository(context: Context) {
             }
     }
 
+    // Helper: Get complete user profile info as a formatted string
+    suspend fun getUserProfileInfo(): String {
+        val preferences = loggedInDataStore.data.first()
+        val name = preferences[UserPreferencesKey.USER_NAME] ?: "Unknown"
+        val email = preferences[UserPreferencesKey.EMAIL] ?: "No email"
+        val userId = preferences[UserPreferencesKey.USER_ID] ?: 0L
+
+        return "Name: $name\nEmail: $email\nID: $userId"
+    }
+
+    // Helper: Check if access token exists
+    suspend fun hasValidAccessToken(): Boolean {
+        val preferences = loggedInDataStore.data.first()
+        val token = preferences[UserPreferencesKey.ACCESS_TOKEN]
+        return !token.isNullOrEmpty()
+    }
 }

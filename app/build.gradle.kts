@@ -39,6 +39,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -63,6 +64,8 @@ dependencies {
 
     val ktor_version = "3.1.2"
     implementation("io.ktor:ktor-client-okhttp:$ktor_version")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
 
