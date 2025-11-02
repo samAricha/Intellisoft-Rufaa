@@ -1,8 +1,8 @@
 package com.teka.rufaa.core.di
 
 import android.content.Context
-import com.teka.rufaa.data_layer.DataStoreRepository
 import com.teka.rufaa.data_layer.api.GenericApiService
+import com.teka.rufaa.data_layer.persistence.DataStoreRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

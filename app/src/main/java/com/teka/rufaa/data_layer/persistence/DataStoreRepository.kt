@@ -1,4 +1,4 @@
-package com.teka.rufaa.data_layer
+package com.teka.rufaa.data_layer.persistence
 
 import android.content.Context
 import androidx.datastore.core.DataStore
@@ -10,17 +10,17 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.teka.rufaa.domain.FieldAgent
+import com.teka.rufaa.data_layer.dtos.LoggedInUser
+import com.teka.rufaa.data_layer.dtos.UserData
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import timber.log.Timber
 import java.io.IOException
-import kotlin.time.ExperimentalTime
-
 
 const val DS_REPOSITORY_TAG = "DS_REPOSITORY_TAG"
+
 
 val Context.onBoardingDataStore: DataStore<Preferences> by preferencesDataStore(name = "on_boarding_pref")
 val Context.loggedInDataStore: DataStore<Preferences> by preferencesDataStore(name = "logged_in_pref")
@@ -32,14 +32,13 @@ class DataStoreRepository(context: Context) {
     private val loggedInDataStore = context.loggedInDataStore
 
 
+
+
     private object PreferencesKey {
-        val USER_TOKEN_KEY = stringPreferencesKey(name = "user_token")
+        val USER_TOKEN_KEY = stringPreferencesKey(name ="user_token")
         val onBoardingKey = booleanPreferencesKey(name = "on_boarding_completed")
         val isLoggedInKey = booleanPreferencesKey(name = "is_logged_in")
-
         val BASE_URL = stringPreferencesKey(name = "base_url")
-        val BT_DEVICE_NAME = stringPreferencesKey(name = "bt_device_name")
-        val BT_DEVICE_ADDRESS = stringPreferencesKey(name = "bt_device_address")
     }
 
     private object UserPreferencesKey {
@@ -53,19 +52,6 @@ class DataStoreRepository(context: Context) {
         val CATEGORY = stringPreferencesKey("category")
 
     }
-
-
-    private object FieldAgentPreferencesKey {
-        val FIELD_AGENT_ID = stringPreferencesKey("field_agent_id")
-        val FIELD_AGENT_USER_ID = stringPreferencesKey("field_agent_user_id")
-        val FIELD_AGENT_BADGE_ID = stringPreferencesKey("field_agent_badge_id")
-        val FIELD_AGENT_REGION = stringPreferencesKey("field_agent_region")
-        val FIELD_AGENT_NOTES = stringPreferencesKey("field_agent_notes")
-        val FIELD_AGENT_CREATED_AT = stringPreferencesKey("field_agent_created_at")
-        val FIELD_AGENT_UPDATED_AT = stringPreferencesKey("field_agent_updated_at")
-        val IS_FIELD_AGENT = booleanPreferencesKey("is_field_agent")
-    }
-
 
     suspend fun saveLoggedInUserData(userData: UserData) {
         loggedInDataStore.edit { preferences ->
@@ -90,77 +76,6 @@ class DataStoreRepository(context: Context) {
 
         }
     }
-
-
-    @OptIn(ExperimentalTime::class)
-    suspend fun saveFieldAgentData(fieldAgent: FieldAgent) {
-        loggedInDataStore.edit { preferences ->
-            preferences[FieldAgentPreferencesKey.FIELD_AGENT_ID] = fieldAgent.id
-            preferences[FieldAgentPreferencesKey.FIELD_AGENT_USER_ID] = fieldAgent.user_id
-            preferences[FieldAgentPreferencesKey.FIELD_AGENT_BADGE_ID] = fieldAgent.badge_id
-            preferences[FieldAgentPreferencesKey.FIELD_AGENT_REGION] = fieldAgent.region
-            preferences[FieldAgentPreferencesKey.FIELD_AGENT_NOTES] = fieldAgent.notes ?: ""
-            preferences[FieldAgentPreferencesKey.FIELD_AGENT_CREATED_AT] = fieldAgent.created_at.toString()
-            preferences[FieldAgentPreferencesKey.FIELD_AGENT_UPDATED_AT] = fieldAgent.updated_at.toString()
-            preferences[FieldAgentPreferencesKey.IS_FIELD_AGENT] = true
-        }
-
-        Timber.tag(DS_REPOSITORY_TAG).i("Field agent data saved: Badge ID ${fieldAgent.badge_id}")
-    }
-
-    suspend fun clearFieldAgentData() {
-        loggedInDataStore.edit { preferences ->
-            preferences.remove(FieldAgentPreferencesKey.FIELD_AGENT_ID)
-            preferences.remove(FieldAgentPreferencesKey.FIELD_AGENT_USER_ID)
-            preferences.remove(FieldAgentPreferencesKey.FIELD_AGENT_BADGE_ID)
-            preferences.remove(FieldAgentPreferencesKey.FIELD_AGENT_REGION)
-            preferences.remove(FieldAgentPreferencesKey.FIELD_AGENT_NOTES)
-            preferences.remove(FieldAgentPreferencesKey.FIELD_AGENT_CREATED_AT)
-            preferences.remove(FieldAgentPreferencesKey.FIELD_AGENT_UPDATED_AT)
-            preferences.remove(FieldAgentPreferencesKey.IS_FIELD_AGENT)
-        }
-
-        Timber.tag(DS_REPOSITORY_TAG).i("Field agent data cleared")
-    }
-
-    val isFieldAgent: Flow<Boolean> = loggedInDataStore.data
-        .map { preferences ->
-            preferences[FieldAgentPreferencesKey.IS_FIELD_AGENT] ?: false
-        }
-
-
-    @OptIn(ExperimentalTime::class)
-    fun getFieldAgentData(): Flow<FieldAgent?> = loggedInDataStore.data
-        .catch { exception ->
-            if (exception is IOException) {
-                emit(emptyPreferences())
-            } else {
-                throw exception
-            }
-        }
-        .map { preferences ->
-            val isFieldAgent = preferences[FieldAgentPreferencesKey.IS_FIELD_AGENT] ?: false
-
-            if (!isFieldAgent) {
-                null
-            } else {
-                try {
-                    FieldAgent(
-                        id = preferences[FieldAgentPreferencesKey.FIELD_AGENT_ID] ?: "",
-                        user_id = preferences[FieldAgentPreferencesKey.FIELD_AGENT_USER_ID] ?: "",
-                        badge_id = preferences[FieldAgentPreferencesKey.FIELD_AGENT_BADGE_ID] ?: "",
-                        region = preferences[FieldAgentPreferencesKey.FIELD_AGENT_REGION] ?: "",
-                        notes = preferences[FieldAgentPreferencesKey.FIELD_AGENT_NOTES]?.takeIf { it.isNotEmpty() },
-                        created_at = preferences[FieldAgentPreferencesKey.FIELD_AGENT_CREATED_AT] ?: "",
-                        updated_at = preferences[FieldAgentPreferencesKey.FIELD_AGENT_UPDATED_AT] ?: ""
-                    )
-                } catch (e: Exception) {
-                    Timber.tag(DS_REPOSITORY_TAG).e("Error parsing field agent data: ${e.message}")
-                    null
-                }
-            }
-        }
-
 
 
     val isUserLoggedIn: Flow<Boolean> = loggedInDataStore.data
@@ -188,10 +103,14 @@ class DataStoreRepository(context: Context) {
 
     suspend fun saveUserData(userData: LoggedInUser) {
         loggedInDataStore.edit { preferences ->
-//            preferences[UserPreferencesKey.ROLE_ID] = userData.roles.first().pivot.roleId
+            preferences[UserPreferencesKey.ROLE_ID] = userData.roles.first().id
         }
     }
 
+    suspend fun getSavedBranchId(): String? {
+        val preferences = loggedInDataStore.data.first()
+        return preferences[UserPreferencesKey.BRANCH_ID]
+    }
 
 
     suspend fun saveBaseUrl(url: String) {
@@ -205,15 +124,31 @@ class DataStoreRepository(context: Context) {
 
         Timber.tag(DS_REPOSITORY_TAG).i("Confirmed saved base url: $savedUrl")
     }
+
     val getBaseUrl: Flow<String> = loggedInDataStore.data.map { preferences ->
         preferences[PreferencesKey.BASE_URL] ?: ""
     }
 
 
+    val getAccessToken: Flow<String> = loggedInDataStore.data.map { preferences ->
+        preferences[PreferencesKey.USER_TOKEN_KEY] ?: ""
+    }
 
+    val readLoggedInUserRoleId: Flow<Int> = loggedInDataStore.data.map { preferences ->
+        preferences[UserPreferencesKey.ROLE_ID] ?: 0
+    }
 
+    suspend fun saveToken(token: String) {
+        loggedInDataStore.edit { preferences ->
+            preferences[PreferencesKey.USER_TOKEN_KEY] = token
+        }
+    }
 
-
+    suspend fun saveRoleId(roleId: Int) {
+        loggedInDataStore.edit { preferences ->
+            preferences[UserPreferencesKey.ROLE_ID] = roleId
+        }
+    }
 
 
 

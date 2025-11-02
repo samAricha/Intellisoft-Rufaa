@@ -1,6 +1,7 @@
 package com.teka.rufaa.data_layer.api
 
 
+import com.teka.rufaa.data_layer.dtos.SignInResponseDto
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.GET
@@ -21,6 +22,14 @@ interface ApiService {
         @Url url: String,
         @QueryMap params: Map<String, String?>
     ): Response<ResponseBody>
+
+    ///////// auth ////////
+    @GET
+    suspend fun submitSignInForm(
+        @Url url: String,
+        @QueryMap params: Map<String, String?>
+    ): Response<SignInResponseDto>
+
 
 
 }

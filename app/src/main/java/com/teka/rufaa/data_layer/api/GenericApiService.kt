@@ -1,7 +1,7 @@
 package com.teka.rufaa.data_layer.api
 
 import android.content.Context
-import com.teka.rufaa.data_layer.DataStoreRepository
+import com.teka.rufaa.data_layer.persistence.DataStoreRepository
 import kotlinx.coroutines.flow.first
 import okhttp3.ResponseBody
 import retrofit2.Response

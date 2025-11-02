@@ -1,4 +1,4 @@
-package com.teka.rufaa.data_layer
+package com.teka.rufaa.data_layer.dtos
 
 data class UserRoleDto(
     val id: Int,

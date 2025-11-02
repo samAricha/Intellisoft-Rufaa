@@ -61,16 +61,6 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 
-
-    implementation(platform("io.github.jan-tennert.supabase:bom:3.2.3"))
-    implementation("io.github.jan-tennert.supabase:postgrest-kt")
-    implementation("io.github.jan-tennert.supabase:supabase-kt")
-    implementation("io.github.jan-tennert.supabase:auth-kt")
-    implementation("io.github.jan-tennert.supabase:realtime-kt")
-    implementation("io.github.jan-tennert.supabase:functions-kt")
-    implementation("io.github.jan-tennert.supabase:storage-kt")
-
-
     val ktor_version = "3.1.2"
     implementation("io.ktor:ktor-client-okhttp:$ktor_version")
 

@@ -1,37 +1,35 @@
 package com.teka.rufaa.modules.auth_module.login
 
 import android.content.Context
-import android.util.Log
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.teka.rufaa.data_layer.api.AppEndpoints
+import com.teka.rufaa.data_layer.api.RetrofitProvider
+import com.teka.rufaa.data_layer.dtos.SignInDto
+import com.teka.rufaa.data_layer.dtos.SignInResponseDto
+import com.teka.rufaa.data_layer.persistence.DataStoreRepository
+import com.teka.rufaa.utils.converters.toParams
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
+import retrofit2.Response
 import timber.log.Timber
 import javax.inject.Inject
-import com.teka.rufaa.data_layer.DataStoreRepository
-import com.teka.rufaa.domain.FieldAgent
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.auth.providers.builtin.Email
-import io.github.jan.supabase.postgrest.postgrest
-import io.github.jan.supabase.postgrest.rpc
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.GlobalScope
 
 
 data class LoginFormUiState(
     var role:  String? = null,
-    var email: String? = null,
+    var mobile: String? = null,
     var password: String? = null,
     val isSavingFormData: Boolean = false,
     val errorMessage: String? = null,
     val successMessage: String? = null,
-    val emailError: String? = null,
+    val mobileError: String? = null,
     val passwordError: String? = null,
     val roleError: String? = null
 )
@@ -45,8 +43,7 @@ data class LoginState(
 @HiltViewModel
 class LoginScreenViewModel @Inject constructor(
     private val appContext: Context,
-    private val dataStoreRepository: DataStoreRepository,
-    private val supabase: SupabaseClient
+    private val dataStoreRepository: DataStoreRepository
 ) : ViewModel() {
     // UI state holder
     private val _loginFormUiState = MutableStateFlow(LoginFormUiState())
@@ -62,42 +59,87 @@ class LoginScreenViewModel @Inject constructor(
     private val _baseUrl = MutableStateFlow<String>("")
     val baseUrl: StateFlow<String> = _baseUrl
 
+
     init {
-        clearAllFieldErrors()
+        observeBaseUrl()
     }
 
 
+    private fun observeBaseUrl() {
+        viewModelScope.launch {
+            val dataStoreRepository = DataStoreRepository(appContext)
+            dataStoreRepository.getBaseUrl.collectLatest { url ->
+                if (url.isEmpty()){
+                    dataStoreRepository.saveBaseUrl(AppEndpoints.DEFAULT_BASE_URL)
+                }
+                Timber.tag("BaseUrl").i(url)
+                _baseUrl.value = url
 
-    @OptIn(DelicateCoroutinesApi::class)
+            }
+        }
+    }
+
+    fun onBaseUrlChange(url: String){
+        _baseUrl.value = url
+    }
+
+    fun changeBaseUrl(url: String){
+        viewModelScope.launch{
+            dataStoreRepository.saveBaseUrl(url)
+        }
+    }
+
+
     fun userSignIn(){
         _loginState.value = loginState.value.copy(isLoading = true)
         if (true) {
             Timber.tag("LOGIN").i("all fields are valid")
             viewModelScope.launch {
                 try {
-                    // Perform sign in
-                    supabase.auth.signInWith(Email) {
-                        email = loginFormUiState.value.email.toString()
-                        password = loginFormUiState.value.password.toString()
+                    val apiService = RetrofitProvider.simpleApiService(appContext)
+
+                    val queryParams = SignInDto(
+                        mobile = loginFormUiState.value.mobile!!,
+                        password = loginFormUiState.value.password!!,
+                        category = loginFormUiState.value.role!!
+                    ).toParams().toMap()
+
+                    val response: Response<SignInResponseDto> =
+                        apiService.submitSignInForm(
+                            url = AppEndpoints.SIGN_IN,
+                            params = queryParams
+                        )
+
+                    Timber.tag("LoginVM").i("signInResponse: $response")
+
+                    if (response.isSuccessful) {
+                        Timber.tag("LoginVM")
+                            .i("successful signInResponseBody::: ${response.body()}")
+
+                        val responseBody = response.body()
+                        if (responseBody?.success == 1) {
+                            responseBody.user_data.firstOrNull()?.let { userData ->
+                                dataStoreRepository.saveLoggedInUserData(userData)
+                                updateUiState { copy(successMessage = "Login Successful") }
+                            }
+                        }else if (responseBody?.success == 0){
+                            updateUiState { copy(errorMessage = responseBody.status_desc) }
+                        }
+
+                    } else {
+                        updateUiState { copy(errorMessage = "Login Failed") }
+
+                        when (response.code()) {
+                            503 -> {
+                                Timber.tag("API Call")
+                                    .i("Service Unavailable: No internet connection")
+                            }
+
+                            else -> {
+                                Timber.tag("API Call").e("HTTP error: ${response.code()}")
+                            }
+                        }
                     }
-
-                    GlobalScope.launch {
-                        getFieldAgent()
-                    }
-
-
-
-                    // If successful, get the current session
-                    val session = supabase.auth.currentSessionOrNull()
-                    val user = supabase.auth.currentUserOrNull()
-
-                    if (session != null && user != null) {
-//                        getFieldAgent()
-                        val accessToken = session.accessToken
-                        val refreshToken = session.refreshToken
-                        // Navigate to home/dashboard
-                    }
-
 
                     _loginState.value = loginState.value.copy(isLoading = false)
 
@@ -112,52 +154,6 @@ class LoginScreenViewModel @Inject constructor(
             Timber.tag("LOGIN").i("some fields are empty")
             _loginState.value = loginState.value.copy(isLoading = false)
         }
-    }
-
-
-    suspend fun getFieldAgent() {
-            Timber.tag("getFieldAgent").i("Getting Field Agent")
-
-            try {
-                // Get current user ID
-                val currentUser = supabase.auth.currentUserOrNull()
-                val userId = currentUser?.id
-
-                if (userId == null) {
-                    Log.e("FieldAgent", "No authenticated user found")
-                    // Handle unauthenticated state
-                    return
-                }
-
-                // Call the Supabase function
-                val response = supabase.postgrest.rpc(
-                    function = "get_field_agent_by_user_id",
-                    parameters = mapOf("p_user_id" to userId)
-                )
-
-                val fieldAgentList = response.decodeList<FieldAgent>()
-
-                if (fieldAgentList.isNotEmpty()) {
-                    val fieldAgent: FieldAgent = fieldAgentList.first()
-
-                    // Save to DataStore
-                    dataStoreRepository.saveFieldAgentData(fieldAgent)
-
-                    // Update state
-//                    _fieldAgent.value = fieldAgent
-
-                    Log.d("FieldAgent", "Field agent found and saved: ${fieldAgent.badge_id}")
-                } else {
-                    // Clear any existing field agent data
-                    dataStoreRepository.clearFieldAgentData()
-//                    _fieldAgent.value = null
-                    Log.d("FieldAgent", "No field agent found for user")
-                }
-
-            } catch (e: Exception) {
-                Log.e("FieldAgent", "Error getting field agent: ${e.message}", e)
-                // Handle error state
-            }
     }
 
 

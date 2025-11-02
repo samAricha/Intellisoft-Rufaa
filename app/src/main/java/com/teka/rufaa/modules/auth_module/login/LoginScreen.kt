@@ -3,14 +3,12 @@ package com.teka.rufaa.modules.auth_module.login
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Mail
-import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -38,15 +36,15 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import com.teka.rufaa.ui.theme.quicksand
 import com.teka.rufaa.ui.theme.rajdhani
+import com.teka.rufaa.utils.composition_locals.LocalDialogController
+import com.teka.rufaa.utils.ui_components.CustomDropDown3
 import com.teka.rufaa.utils.ui_components.CustomInputTextField2
 import com.teka.rufaa.utils.ui_components.CustomSnackbarHost
 import com.teka.rufaa.utils.ui_components.HandleSnackbarMessages
 import com.teka.rufaa.utils.ui_components.InputDialogWidget
 import com.teka.rufaa.utils.ui_components.SnackbarManagerWithEncoding
-import com.teka.rufaa.utils.composition_locals.LocalDialogController
 import timber.log.Timber
 import com.teka.rufaa.R
-
 
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -65,8 +63,8 @@ fun LoginScreen(
     val dialogController = LocalDialogController.current
     val scrollState = rememberScrollState()
 
+    val roleOptions = listOf("Admin", "CM", "Agent", "Loader", "Field Officer")
     var isPasswordOpen by remember { mutableStateOf(false) }
-    var isDemoMenuExpanded by remember { mutableStateOf(false) }
 
     val hostState = remember { SnackbarHostState() }
     val haptic = LocalHapticFeedback.current
@@ -85,6 +83,8 @@ fun LoginScreen(
         onClearSuccess = { viewModel.clearSuccess() }
     )
 
+
+
     if (dialogController.showDialog.value) {
         InputDialogWidget(
             title = "Change link",
@@ -92,6 +92,7 @@ fun LoginScreen(
             initialValue = baseUrl.value,
             onSubmit = { inputUrl ->
                 Timber.d("User input: $inputUrl")
+                viewModel.changeBaseUrl(inputUrl)
                 dialogController.triggerDialog(false)
             },
             onDismiss = {
@@ -100,17 +101,21 @@ fun LoginScreen(
         )
     }
 
+
+
     //screen validators
-    val emailValidator: (String) -> String? = { value ->
+    val mobileValidator: (String) -> String? = { value ->
         when {
-            value.isBlank() -> "Email is required"
-            !android.util.Patterns.EMAIL_ADDRESS.matcher(value).matches() -> "Please enter a valid email address"
+            value.isBlank() -> "Mobile number is required"
+            value.length < 10 -> "Mobile number must be at least 10 digits"
+            !value.all { it.isDigit() } -> "Mobile number must contain only digits"
             else -> {
-                viewModel.clearFieldError("email")
+                viewModel.clearFieldError("mobile")
                 null
             }
         }
     }
+
     val passwordValidator: (String) -> String? = { value ->
         when {
             value.isBlank() -> "Password is required"
@@ -122,6 +127,14 @@ fun LoginScreen(
         }
     }
 
+    val userRoleValidator: (String) -> String? = { value ->
+        if (value.isBlank()) "Please select a role" else {
+            viewModel.clearFieldError("role")
+            null
+        }
+    }
+
+
     Scaffold(
         snackbarHost = { CustomSnackbarHost(hostState = snackbarManager.hostState) },
         containerColor = Color(0xFFF8F9FA)
@@ -132,9 +145,8 @@ fun LoginScreen(
                 .fillMaxSize()
                 .verticalScroll(scrollState)
                 .padding(scaffoldPadding)
-                .padding(horizontal = 12.dp)
-                .padding(top = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .padding(horizontal = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -150,8 +162,8 @@ fun LoginScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.anga_hewa_logo),
-                        contentDescription = "AngaaHewa Logo",
+                        painter = painterResource(id = R.drawable.heximas_pack_named_no_bg),
+                        contentDescription = "HexiPack Logo",
                         modifier = Modifier.size(110.dp),
                         contentScale = ContentScale.Fit
                     )
@@ -159,6 +171,25 @@ fun LoginScreen(
             }
 
             Spacer(modifier = Modifier.height(22.dp))
+
+            Text(
+                text = "Welcome Back",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1A1A1A),
+                fontFamily = rajdhani
+            )
+
+            Text(
+                text = "Sign in to continue to Heximas Pack",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Normal,
+                color = Color(0xFF6B7280),
+                fontFamily = rajdhani,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+
+            Spacer(modifier = Modifier.height(38.dp))
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -168,140 +199,48 @@ fun LoginScreen(
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
 
-                    Text(
-                        text = "Welcome Back",
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1A1A1A),
-                        fontFamily = rajdhani
+                    CustomDropDown3(
+                        labelText = "Select Role",
+                        options = roleOptions,
+                        selectedValue = uiState.role?:"",
+                        onValueChange = {it -> viewModel.updateUiState { copy(role = it) } },
+                        onOptionSelected = {it -> viewModel.updateUiState { copy(role = it) }},//this can be empty i.e {}, used both of these two bcs of complex objects support
+                        onValidate = userRoleValidator,
+                        optionTextProvider = { option ->
+                            Text(
+                                text = option,
+                                fontFamily = quicksand,
+                                fontWeight = FontWeight.Medium
+                            )
+                        },
+                        isOptional = false,
+                        enableRealTimeValidation = true,
+                        errorMessage = fieldErrors["role"]
                     )
 
-                    Text(
-                        text = "Sign in to continue to Angaa",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = Color(0xFF6B7280),
-                        fontFamily = rajdhani,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Demo Credentials Dropdown
-                    ExposedDropdownMenuBox(
-                        expanded = isDemoMenuExpanded,
-                        onExpandedChange = { isDemoMenuExpanded = it }
-                    ) {
-                        OutlinedTextField(
-                            value = "Select Demo Credentials",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Quick Login", fontFamily = quicksand) },
-                            trailingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.ArrowDropDown,
-                                    contentDescription = "Dropdown",
-                                    tint = Color(0xFF6B7280)
-                                )
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = Color(0xFFE5E7EB),
-                                focusedLabelColor = MaterialTheme.colorScheme.primary,
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-
-                        ExposedDropdownMenu(
-                            expanded = isDemoMenuExpanded,
-                            onDismissRequest = { isDemoMenuExpanded = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(
-                                            "Baite Account",
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontFamily = rajdhani,
-                                            fontSize = 16.sp
-                                        )
-                                        Text(
-                                            "baite.murume@gmail.com",
-                                            fontSize = 13.sp,
-                                            color = Color(0xFF6B7280),
-                                            fontFamily = quicksand
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    viewModel.updateUiState {
-                                        copy(
-                                            email = "baite.murume@gmail.com",
-                                            password = "baite123"
-                                        )
-                                    }
-                                    isDemoMenuExpanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(
-                                            "Demo Account",
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontFamily = rajdhani,
-                                            fontSize = 16.sp
-                                        )
-                                        Text(
-                                            "demo@angaa.com",
-                                            fontSize = 13.sp,
-                                            color = Color(0xFF6B7280),
-                                            fontFamily = quicksand
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    viewModel.updateUiState {
-                                        copy(
-                                            email = "demo@angaa.com",
-                                            password = "demo123"
-                                        )
-                                    }
-                                    isDemoMenuExpanded = false
-                                }
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
 
                     CustomInputTextField2(
-                        labelText = "Email",
-                        value = uiState.email ?: "",
-                        onValueChange = { viewModel.updateUiState { copy(email = it) } },
-                        onValidate = emailValidator,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        labelText = "Mobile Number",
+                        value = uiState.mobile?:"",
+                        onValueChange = { viewModel.updateUiState { copy(mobile = it) } },
+                        onValidate = mobileValidator,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                         trailingIcon = {
                             Icon(
-                                imageVector = Icons.Default.Mail,
-                                contentDescription = "Email",
+                                imageVector = Icons.Default.Phone,
+                                contentDescription = "Phone",
                                 tint = Color(0xFF6B7280)
                             )
                         },
-                        errorMessage = fieldErrors["email"],
+                        errorMessage = fieldErrors["mobile"],
                     )
-
-                    Spacer(modifier = Modifier.height(20.dp))
 
                     CustomInputTextField2(
                         labelText = "Password",
-                        value = uiState.password ?: "",
+                        value = uiState.password?:"",
                         onValueChange = { viewModel.updateUiState { copy(password = it) } },
                         onValidate = passwordValidator,
                         visualTransformation = if (isPasswordOpen) VisualTransformation.None else PasswordVisualTransformation(),
@@ -323,13 +262,14 @@ fun LoginScreen(
                         errorMessage = fieldErrors["password"],
                     )
 
-                    Spacer(modifier = Modifier.height(28.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Button(
                         onClick = {
                             viewModel.validateAndSubmitSimple(
-                                uiState.email to emailValidator,
+                                uiState.mobile to mobileValidator,
                                 uiState.password to passwordValidator,
+                                uiState.role to userRoleValidator
                             )
                         },
                         modifier = Modifier
@@ -359,7 +299,7 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             Text(
-                text = "Streamline Your Monitoring Operations",
+                text = "Streamline Your Pack House Operations",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
                 color = Color(0xFF6B7280),
@@ -416,4 +356,9 @@ fun LoginScreen(
             }
         }
     }
+
+
+
+
+
 }
