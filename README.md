@@ -94,5 +94,5 @@ Project Link: [https://github.com/samAricha/Intellisoft-Rufaa](https://github.co
 ---
 
 <div align="center">
-  Made with ❤️ by Your Aricha
+  Made with ❤️ by Aricha
 </div>
