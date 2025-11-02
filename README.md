@@ -18,7 +18,7 @@
   <img src="screenshots/screenshot3.jpeg" alt="BMI Calculation" width="200"/>
   <img src="screenshots/screenshot4.jpeg" alt="Patient Records" width="200"/>
   <img src="screenshots/screenshot5.jpeg" alt="Dashboard" width="200"/>
-  <img src="screenshot6.jpeg" alt="Patient Details" width="200"/>
+  <img src="screenshots/screenshot6.jpeg" alt="Patient Details" width="200"/>
 </div>
 
 ## ✨ Features
@@ -56,7 +56,8 @@
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/rufaa-care.git
+   git clone https://github.com/samAricha/Intellisoft-Rufaa.git
+   cd Intellisoft-Rufaa
    ```
 2. Open the project in Android Studio
 3. Sync the project with Gradle files
@@ -78,9 +79,9 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## 📧 Contact
 
-Your Name - [@your_twitter](https://twitter.com/your_twitter) - your.email@example.com
+Aricha - [@samAricha](https://github.com/samAricha) - samaricha001@gmail.com
 
-Project Link: [https://github.com/yourusername/rufaa-care](https://github.com/yourusername/rufaa-care)
+Project Link: [https://github.com/samAricha/Intellisoft-Rufaa](https://github.com/samAricha/Intellisoft-Rufaa)
 
 ## 🙏 Acknowledgments
 
