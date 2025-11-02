@@ -5,8 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.teka.rufaa.data_layer.api.AppEndpoints
 import com.teka.rufaa.data_layer.api.RetrofitProvider
-import com.teka.rufaa.modules.vitals.ValidationErrorResponse
+import com.teka.rufaa.data_layer.persistence.room.OverweightAssessmentDao
+import com.teka.rufaa.data_layer.persistence.room.entities.OverweightAssessment
 import com.teka.rufaa.modules.vitals.general_assesment.AssessmentResponseDto
+import com.teka.rufaa.modules.vitals.general_assesment.ValidationErrorResponse
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,7 +41,8 @@ data class OverweightAssessmentUiState(
 
 @HiltViewModel
 class OverweightAssessmentViewModel @Inject constructor(
-    private val appContext: Context
+    private val appContext: Context,
+    private val overweightAssessmentDao: OverweightAssessmentDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(OverweightAssessmentUiState())
@@ -63,7 +66,7 @@ class OverweightAssessmentViewModel @Inject constructor(
 
         // Client-side validation
         val errors = mutableMapOf<String, String>()
-        
+
         if (visitDate.isBlank()) {
             errors["visit_date"] = "Visit date is required"
         }
@@ -86,113 +89,187 @@ class OverweightAssessmentViewModel @Inject constructor(
         }
 
         _uiState.update { it.copy(isLoading = true) }
-        
+
         viewModelScope.launch {
             try {
-                val apiService = RetrofitProvider.simpleApiService(appContext)
-                
-                val request = OverweightAssessmentRequest(
-                    visit_date = visitDate,
-                    general_health = generalHealth,
-                    currently_using_drugs = currentlyUsingDrugs,
+                // Step 1: Save to local database first
+                val assessmentEntity = OverweightAssessment(
+                    patientId = patientId.trim(),
+                    visitDate = visitDate,
+                    generalHealth = generalHealth,
+                    currentlyUsingDrugs = currentlyUsingDrugs,
                     comments = comments.trim(),
-                    patient_id = patientId.trim(),
-                    form_type = "B"
+                    formType = "B",
+                    isSynced = false
                 )
 
-                val requestBody = json.encodeToString(
-                    OverweightAssessmentRequest.serializer(),
-                    request
-                ).toRequestBody("application/json".toMediaType())
+                overweightAssessmentDao.insert(assessmentEntity)
+                Timber.tag("OverweightAssessmentVM").i("Overweight assessment saved to local database")
 
-                val response = apiService.post(
-                    url = AppEndpoints.VISITS_ADD,
-                    body = requestBody
-                )
+                // Step 2: Attempt to sync with backend
+                syncAssessmentToBackend(assessmentEntity)
 
-                Timber.tag("OverweightAssessmentVM").i("Response: $response")
+            } catch (e: Exception) {
+                Timber.tag("OverweightAssessmentVM").e("Exception during local save: ${e.localizedMessage}")
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Failed to save assessment locally: ${e.localizedMessage}"
+                    )
+                }
+            }
+        }
+    }
 
-                if (response.isSuccessful) {
-                    val responseBody = response.body()?.string()
-                    Timber.tag("OverweightAssessmentVM").i("Response Body: $responseBody")
+    private suspend fun syncAssessmentToBackend(assessment: OverweightAssessment) {
+        try {
+            val apiService = RetrofitProvider.simpleApiService(appContext)
 
-                    if (responseBody != null) {
-                        val assessmentResponse = json.decodeFromString<AssessmentResponseDto>(responseBody)
-                        
-                        if (assessmentResponse.success) {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    successMessage = assessmentResponse.data.message,
-                                    assessmentSuccess = true
-                                )
-                            }
-                        } else {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    errorMessage = assessmentResponse.message
-                                )
-                            }
-                        }
-                    } else {
+            val request = OverweightAssessmentRequest(
+                visit_date = assessment.visitDate,
+                general_health = assessment.generalHealth,
+                currently_using_drugs = assessment.currentlyUsingDrugs,
+                comments = assessment.comments,
+                patient_id = assessment.patientId,
+                form_type = "B"
+            )
+
+            val requestBody = json.encodeToString(
+                OverweightAssessmentRequest.serializer(),
+                request
+            ).toRequestBody("application/json".toMediaType())
+
+            val response = apiService.post(
+                url = AppEndpoints.VISITS_ADD,
+                body = requestBody
+            )
+
+            Timber.tag("OverweightAssessmentVM").i("Backend Response Code: ${response.code()}")
+
+            if (response.isSuccessful) {
+                val responseBody = response.body()?.string()
+                Timber.tag("OverweightAssessmentVM").i("Response Body: $responseBody")
+
+                if (responseBody != null) {
+                    val assessmentResponse = json.decodeFromString<AssessmentResponseDto>(responseBody)
+
+                    if (assessmentResponse.success) {
+                        // Update local record as synced
+                        overweightAssessmentDao.markAsSynced(
+                            assessment.id,
+                            assessmentResponse.data.id,
+                            assessmentResponse.data.visit_id
+                        )
+                        Timber.tag("OverweightAssessmentVM").i("Assessment synced successfully with server")
+
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
-                                errorMessage = "Empty response from server"
+                                successMessage = assessmentResponse.data.message,
+                                assessmentSuccess = true
+                            )
+                        }
+                    } else {
+                        // Mark sync error but data is saved locally
+                        overweightAssessmentDao.updateSyncError(assessment.id, assessmentResponse.message)
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                successMessage = "Assessment saved locally. Sync failed: ${assessmentResponse.message}",
+                                assessmentSuccess = true
                             )
                         }
                     }
                 } else {
-                    val errorBody = response.errorBody()?.string()
-                    Timber.tag("OverweightAssessmentVM").e("Error: $errorBody")
+                    overweightAssessmentDao.updateSyncError(assessment.id, "Empty response from server")
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            successMessage = "Assessment saved locally. Will sync later.",
+                            assessmentSuccess = true
+                        )
+                    }
+                }
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Timber.tag("OverweightAssessmentVM").e("Sync Error: $errorBody")
 
-                    // Handle validation errors
-                    if (response.code() == 422 && errorBody != null) {
-                        try {
-                            val validationError = json.decodeFromString<ValidationErrorResponse>(errorBody)
-                            val fieldErrors = validationError.errors.mapValues { entry ->
-                                entry.value.firstOrNull() ?: "Invalid value"
-                            }
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    validationErrors = fieldErrors,
-                                    errorMessage = validationError.message
-                                )
-                            }
-                        } catch (e: Exception) {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    errorMessage = errorBody
-                                )
-                            }
+                // Handle validation errors
+                if (response.code() == 422 && errorBody != null) {
+                    try {
+                        val validationError = json.decodeFromString<ValidationErrorResponse>(errorBody)
+                        overweightAssessmentDao.updateSyncError(assessment.id, validationError.message)
+
+                        val fieldErrors = validationError.errors.mapValues { entry ->
+                            entry.value.firstOrNull() ?: "Invalid value"
                         }
-                    } else {
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
-                                errorMessage = errorBody ?: "Failed to submit assessment"
+                                validationErrors = fieldErrors,
+                                errorMessage = "Assessment saved locally but sync failed: ${validationError.message}"
                             )
                         }
-
-                        when (response.code()) {
-                            401 -> Timber.tag("OverweightAssessmentVM").i("Unauthorized: Please login again")
-                            503 -> Timber.tag("OverweightAssessmentVM").i("Service Unavailable: No internet connection")
-                            else -> Timber.tag("OverweightAssessmentVM").e("HTTP error: ${response.code()}")
+                    } catch (e: Exception) {
+                        overweightAssessmentDao.updateSyncError(assessment.id, errorBody)
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                successMessage = "Assessment saved locally. Will retry sync later.",
+                                assessmentSuccess = true
+                            )
                         }
                     }
-                }
+                } else {
+                    // Save error but allow continuation since data is saved locally
+                    val errorMsg = when (response.code()) {
+                        401 -> "Unauthorized - Please login again"
+                        503 -> "Service unavailable - No internet connection"
+                        else -> errorBody ?: "Network error"
+                    }
 
-            } catch (e: Exception) {
-                Timber.tag("OverweightAssessmentVM").e("Exception: ${e.localizedMessage}")
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "Failed to submit assessment: ${e.localizedMessage}"
-                    )
+                    overweightAssessmentDao.updateSyncError(assessment.id, errorMsg)
+                    Timber.tag("OverweightAssessmentVM").w("Sync failed: $errorMsg. Data saved locally.")
+
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            successMessage = "Assessment saved locally. Will sync when online.",
+                            assessmentSuccess = true
+                        )
+                    }
                 }
+            }
+
+        } catch (e: Exception) {
+            Timber.tag("OverweightAssessmentVM").e("Backend sync exception: ${e.localizedMessage}")
+            overweightAssessmentDao.updateSyncError(assessment.id, e.localizedMessage)
+
+            // Data is saved locally, so we still consider it a success
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    successMessage = "Assessment saved locally. Will sync when connection is available.",
+                    assessmentSuccess = true
+                )
+            }
+        }
+    }
+
+    /**
+     * Manually sync unsynced assessments
+     */
+    fun syncUnsyncedAssessments() {
+        viewModelScope.launch {
+            try {
+                val unsyncedAssessments = overweightAssessmentDao.getUnsyncedAssessments()
+                Timber.tag("OverweightAssessmentVM").i("Found ${unsyncedAssessments.size} unsynced assessments")
+
+                unsyncedAssessments.forEach { assessment ->
+                    syncAssessmentToBackend(assessment)
+                }
+            } catch (e: Exception) {
+                Timber.tag("OverweightAssessmentVM").e("Error syncing unsynced assessments: ${e.localizedMessage}")
             }
         }
     }

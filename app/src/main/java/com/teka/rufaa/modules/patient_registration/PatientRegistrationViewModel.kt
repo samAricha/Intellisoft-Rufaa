@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.teka.rufaa.data_layer.api.AppEndpoints
 import com.teka.rufaa.data_layer.api.RetrofitProvider
+import com.teka.rufaa.data_layer.persistence.room.PatientDao
+import com.teka.rufaa.data_layer.persistence.room.entities.Patient
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -57,7 +59,8 @@ data class PatientRegistrationUiState(
 
 @HiltViewModel
 class PatientRegistrationViewModel @Inject constructor(
-    private val appContext: Context
+    private val appContext: Context,
+    private val patientDao: PatientDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PatientRegistrationUiState())
@@ -82,7 +85,7 @@ class PatientRegistrationViewModel @Inject constructor(
 
         // Client-side validation
         val errors = mutableMapOf<String, String>()
-        
+
         if (firstname.isBlank()) {
             errors["firstname"] = "First name is required"
         }
@@ -108,119 +111,196 @@ class PatientRegistrationViewModel @Inject constructor(
         }
 
         _uiState.update { it.copy(isLoading = true) }
-        
+
         viewModelScope.launch {
             try {
-                val apiService = RetrofitProvider.simpleApiService(appContext)
-                
-                val request = PatientRegistrationRequest(
+                // Check if patient with this unique ID already exists locally
+                val existingPatient = patientDao.getPatientByUniqueId(unique.trim())
+                if (existingPatient != null) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            validationErrors = mapOf("unique" to "A patient with this ID already exists"),
+                            errorMessage = "Patient ID must be unique"
+                        )
+                    }
+                    return@launch
+                }
+
+                // Step 1: Save to local database first
+                val patientEntity = Patient(
                     firstname = firstname.trim(),
                     lastname = lastname.trim(),
-                    unique = unique.trim(),
+                    uniqueId = unique.trim(),
                     dob = dob,
                     gender = gender,
-                    reg_date = regDate
+                    regDate = regDate,
+                    isSynced = false
                 )
 
-                val requestBody = json.encodeToString(
-                    PatientRegistrationRequest.serializer(),
-                    request
-                ).toRequestBody("application/json".toMediaType())
+                patientDao.insert(patientEntity)
+                Timber.tag("PatientRegVM").i("Patient saved to local database")
 
-                val response = apiService.post(
-                    url = AppEndpoints.PATIENTS_REGISTER,
-                    body = requestBody
-                )
+                // Step 2: Attempt to sync with backend
+                syncPatientToBackend(patientEntity)
 
-                Timber.tag("PatientRegVM").i("Response: $response")
+            } catch (e: Exception) {
+                Timber.tag("PatientRegVM").e("Exception during local save: ${e.localizedMessage}")
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Failed to save patient locally: ${e.localizedMessage}"
+                    )
+                }
+            }
+        }
+    }
 
-                if (response.isSuccessful) {
-                    val responseBody = response.body()?.string()
-                    Timber.tag("PatientRegVM").i("Response Body: $responseBody")
+    private suspend fun syncPatientToBackend(patient: Patient) {
+        try {
+            val apiService = RetrofitProvider.simpleApiService(appContext)
 
-                    if (responseBody != null) {
-                        val registrationResponse = json.decodeFromString<PatientRegistrationResponseDto>(responseBody)
-                        
-                        if (registrationResponse.success) {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    successMessage = registrationResponse.data.message,
-                                    registrationSuccess = true
-                                )
-                            }
-                        } else {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    errorMessage = registrationResponse.message
-                                )
-                            }
-                        }
-                    } else {
+            val request = PatientRegistrationRequest(
+                firstname = patient.firstname,
+                lastname = patient.lastname,
+                unique = patient.uniqueId,
+                dob = patient.dob,
+                gender = patient.gender,
+                reg_date = patient.regDate
+            )
+
+            val requestBody = json.encodeToString(
+                PatientRegistrationRequest.serializer(),
+                request
+            ).toRequestBody("application/json".toMediaType())
+
+            val response = apiService.post(
+                url = AppEndpoints.PATIENTS_REGISTER,
+                body = requestBody
+            )
+
+            Timber.tag("PatientRegVM").i("Backend Response Code: ${response.code()}")
+
+            if (response.isSuccessful) {
+                val responseBody = response.body()?.string()
+                Timber.tag("PatientRegVM").i("Response Body: $responseBody")
+
+                if (responseBody != null) {
+                    val registrationResponse = json.decodeFromString<PatientRegistrationResponseDto>(responseBody)
+
+                    if (registrationResponse.success) {
+                        // Update local record as synced
+                        patientDao.markAsSynced(patient.id, registrationResponse.data.proceed)
+                        Timber.tag("PatientRegVM").i("Patient synced successfully with server")
+
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
-                                errorMessage = "Empty response from server"
+                                successMessage = registrationResponse.data.message,
+                                registrationSuccess = true
+                            )
+                        }
+                    } else {
+                        // Mark sync error but data is saved locally
+                        patientDao.updateSyncError(patient.id, registrationResponse.message)
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                successMessage = "Patient saved locally. Sync failed: ${registrationResponse.message}",
+                                registrationSuccess = true
                             )
                         }
                     }
                 } else {
-                    val errorBody = response.errorBody()?.string()
-                    Timber.tag("PatientRegVM").e("Error: $errorBody")
+                    patientDao.updateSyncError(patient.id, "Empty response from server")
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            successMessage = "Patient saved locally. Will sync later.",
+                            registrationSuccess = true
+                        )
+                    }
+                }
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Timber.tag("PatientRegVM").e("Sync Error: $errorBody")
 
-                    // Handle validation errors
-                    if (response.code() == 422 && errorBody != null) {
-                        try {
-                            val validationError = json.decodeFromString<ValidationErrorResponse>(errorBody)
-                            val fieldErrors = validationError.errors.mapValues { entry ->
-                                entry.value.firstOrNull() ?: "Invalid value"
-                            }
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    validationErrors = fieldErrors,
-                                    errorMessage = validationError.message
-                                )
-                            }
-                        } catch (e: Exception) {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    errorMessage = errorBody
-                                )
-                            }
+                // Handle validation errors
+                if (response.code() == 422 && errorBody != null) {
+                    try {
+                        val validationError = json.decodeFromString<ValidationErrorResponse>(errorBody)
+                        patientDao.updateSyncError(patient.id, validationError.message)
+
+                        val fieldErrors = validationError.errors.mapValues { entry ->
+                            entry.value.firstOrNull() ?: "Invalid value"
                         }
-                    } else {
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
-                                errorMessage = errorBody ?: "Failed to register patient"
+                                validationErrors = fieldErrors,
+                                errorMessage = "Patient saved locally but sync failed: ${validationError.message}"
                             )
                         }
-
-                        when (response.code()) {
-                            401 -> {
-                                Timber.tag("PatientRegVM").i("Unauthorized: Please login again")
-                            }
-                            503 -> {
-                                Timber.tag("PatientRegVM").i("Service Unavailable: No internet connection")
-                            }
-                            else -> {
-                                Timber.tag("PatientRegVM").e("HTTP error: ${response.code()}")
-                            }
+                    } catch (e: Exception) {
+                        patientDao.updateSyncError(patient.id, errorBody)
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                successMessage = "Patient saved locally. Will retry sync later.",
+                                registrationSuccess = true
+                            )
                         }
                     }
-                }
+                } else {
+                    // Save error but allow continuation since data is saved locally
+                    val errorMsg = when (response.code()) {
+                        401 -> "Unauthorized - Please login again"
+                        503 -> "Service unavailable - No internet connection"
+                        else -> errorBody ?: "Network error"
+                    }
 
-            } catch (e: Exception) {
-                Timber.tag("PatientRegVM").e("Exception: ${e.localizedMessage}")
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "Failed to register patient: ${e.localizedMessage}"
-                    )
+                    patientDao.updateSyncError(patient.id, errorMsg)
+                    Timber.tag("PatientRegVM").w("Sync failed: $errorMsg. Data saved locally.")
+
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            successMessage = "Patient saved locally. Will sync when online.",
+                            registrationSuccess = true
+                        )
+                    }
                 }
+            }
+
+        } catch (e: Exception) {
+            Timber.tag("PatientRegVM").e("Backend sync exception: ${e.localizedMessage}")
+            patientDao.updateSyncError(patient.id, e.localizedMessage)
+
+            // Data is saved locally, so we still consider it a success
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    successMessage = "Patient saved locally. Will sync when connection is available.",
+                    registrationSuccess = true
+                )
+            }
+        }
+    }
+
+    /**
+     * Manually sync unsynced patients
+     */
+    fun syncUnsyncedPatients() {
+        viewModelScope.launch {
+            try {
+                val unsyncedPatients = patientDao.getUnsyncedPatients()
+                Timber.tag("PatientRegVM").i("Found ${unsyncedPatients.size} unsynced patients")
+
+                unsyncedPatients.forEach { patient ->
+                    syncPatientToBackend(patient)
+                }
+            } catch (e: Exception) {
+                Timber.tag("PatientRegVM").e("Error syncing unsynced patients: ${e.localizedMessage}")
             }
         }
     }
