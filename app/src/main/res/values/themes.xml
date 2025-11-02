@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.ChaiTrak" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Rufaa" parent="android:Theme.Material.Light.NoActionBar" />
 
     <style name="Theme.CustomSplashScreenTheme" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/white</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/angaa_small</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/rufaa_logo</item>
         <item name="windowSplashScreenAnimationDuration">1</item>
 
-        <item name="postSplashScreenTheme">@style/Theme.ChaiTrak</item>
+        <item name="postSplashScreenTheme">@style/Theme.Rufaa</item>
     </style>
 
 </resources>

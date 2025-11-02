@@ -162,8 +162,8 @@ fun LoginScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.heximas_pack_named_no_bg),
-                        contentDescription = "HexiPack Logo",
+                        painter = painterResource(id = R.drawable.rufaa_logo),
+                        contentDescription = "Rufaa Logo",
                         modifier = Modifier.size(110.dp),
                         contentScale = ContentScale.Fit
                     )
@@ -181,7 +181,7 @@ fun LoginScreen(
             )
 
             Text(
-                text = "Sign in to continue to Heximas Pack",
+                text = "Sign in to continue to Rufaa",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Normal,
                 color = Color(0xFF6B7280),
@@ -299,19 +299,19 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             Text(
-                text = "Streamline Your Pack House Operations",
+                text = "Simplify Patient Registration & Health Tracking",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF6B7280),
+                color = Color(0xFF006A72),
                 fontFamily = quicksand,
                 textAlign = TextAlign.Center
             )
 
             Text(
-                text = "Efficient • Organized • Productive",
+                text = "Smart • Reliable • Compassionate Care",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Normal,
-                color = Color(0xFF9CA3AF),
+                color = Color(0xFF6B7280),
                 fontFamily = quicksand,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 4.dp)
