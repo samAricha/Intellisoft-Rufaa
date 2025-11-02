@@ -18,8 +18,6 @@ import kotlin.text.ifEmpty
 const val RETROFIT_TAG = "RETROFIT_TAG"
 
 
-
-
 object RetrofitProvider {
 
     private val json = Json {
@@ -45,6 +43,7 @@ object RetrofitProvider {
 
     private fun provideOkhttpClient(context: Context): OkHttpClient =
         OkHttpClient.Builder()
+            .addInterceptor(LoggingInterceptorProvider.provideLoggingInterceptor())
             .addInterceptor(AuthInterceptor(context))
             .build()
 
