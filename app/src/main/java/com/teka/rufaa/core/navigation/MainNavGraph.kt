@@ -11,6 +11,9 @@ import com.teka.rufaa.modules.home.HomeScreen
 import com.teka.rufaa.modules.patient_details.PatientDetailScreen
 import com.teka.rufaa.modules.patient_registration.PatientRegistrationScreen
 import com.teka.rufaa.modules.patients_list.PatientsListScreen
+import com.teka.rufaa.modules.vitals.VitalsScreen
+import com.teka.rufaa.modules.vitals.general_assesment.GeneralAssessmentScreen
+import com.teka.rufaa.modules.vitals.overweight_assesment.OverweightAssessmentScreen
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,6 +59,27 @@ fun MainNavGraph(
 
         composable("patient_registration") {
             PatientRegistrationScreen(navigator = navController)
+        }
+
+        composable("vitals/{patientId}") { backStackEntry ->
+            VitalsScreen(
+                navigator = navController,
+                patientId = backStackEntry.arguments?.getString("patientId") ?: ""
+            )
+        }
+
+        composable("general_assessment/{patientId}") { backStackEntry ->
+            GeneralAssessmentScreen(
+                navigator = navController,
+                patientId = backStackEntry.arguments?.getString("patientId") ?: ""
+            )
+        }
+
+        composable("overweight_assessment/{patientId}") { backStackEntry ->
+            OverweightAssessmentScreen(
+                navigator = navController,
+                patientId = backStackEntry.arguments?.getString("patientId") ?: ""
+            )
         }
 
 

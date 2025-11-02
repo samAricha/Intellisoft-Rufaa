@@ -8,9 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,9 +40,9 @@ fun PatientsListScreen(
     val uiState by viewModel.uiState.collectAsState()
     val patients by viewModel.patients.collectAsState()
     val filteredPatients by viewModel.filteredPatients.collectAsState()
-    
+
     var searchQuery by remember { mutableStateOf("") }
-    
+
     val hostState = remember { SnackbarHostState() }
     val haptic = LocalHapticFeedback.current
     val snackbarManager = remember {
@@ -113,7 +111,7 @@ fun PatientsListScreen(
             ) {
                 OutlinedTextField(
                     value = searchQuery,
-                    onValueChange = { 
+                    onValueChange = {
                         searchQuery = it
                         viewModel.searchPatients(it)
                     },
@@ -186,6 +184,27 @@ fun PatientsListScreen(
                             fontWeight = FontWeight.Medium,
                             color = Color(0xFF6B7280)
                         )
+                        if (searchQuery.isEmpty()) {
+                            Button(
+                                onClick = { navigator.navigate("patient_registration") },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF006A72)
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Register New Patient",
+                                    fontFamily = quicksand,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -199,8 +218,11 @@ fun PatientsListScreen(
                     items(filteredPatients) { patient ->
                         PatientCard(
                             patient = patient,
-                            onClick = {
+                            onViewDetails = {
                                 navigator.navigate("patient_detail/${patient.id}")
+                            },
+                            onRecordVitals = {
+                                navigator.navigate("vitals/${patient.id}")
                             }
                         )
                     }
@@ -213,121 +235,194 @@ fun PatientsListScreen(
 @Composable
 fun PatientCard(
     patient: PatientDto,
-    onClick: () -> Unit
+    onViewDetails: () -> Unit,
+    onRecordVitals: () -> Unit
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // Avatar and Info
+            // Main Patient Info
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onViewDetails() }
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Avatar
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (patient.gender == "Male") Color(0xFFDCFCE7)
-                            else Color(0xFFFCE7F3)
-                        ),
-                    contentAlignment = Alignment.Center
+                // Avatar and Info
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Text(
-                        text = "${patient.firstname.firstOrNull()?.uppercaseChar() ?: ""}${patient.lastname.firstOrNull()?.uppercaseChar() ?: ""}",
-                        fontFamily = rajdhani,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = if (patient.gender == "Male") Color(0xFF059669)
-                        else Color(0xFFDB2777)
-                    )
+                    // Avatar
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (patient.gender == "Male") Color(0xFFDCFCE7)
+                                else Color(0xFFFCE7F3)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "${patient.firstname.firstOrNull()?.uppercaseChar() ?: ""}${patient.lastname.firstOrNull()?.uppercaseChar() ?: ""}",
+                            fontFamily = rajdhani,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = if (patient.gender == "Male") Color(0xFF059669)
+                            else Color(0xFFDB2777)
+                        )
+                    }
+
+                    // Patient Info
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "${patient.firstname} ${patient.lastname}",
+                            fontFamily = rajdhani,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = Color(0xFF1A1A1A),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "ID: ${patient.unique}",
+                                fontFamily = quicksand,
+                                fontSize = 12.sp,
+                                color = Color(0xFF6B7280)
+                            )
+                            Text(
+                                text = "•",
+                                color = Color(0xFF9CA3AF)
+                            )
+                            Text(
+                                text = calculateAge(patient.dob),
+                                fontFamily = quicksand,
+                                fontSize = 12.sp,
+                                color = Color(0xFF6B7280)
+                            )
+                        }
+                        // Gender Badge
+                        Surface(
+                            color = if (patient.gender == "Male") Color(0xFFDCFCE7)
+                            else Color(0xFFFCE7F3),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = patient.gender,
+                                fontFamily = quicksand,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (patient.gender == "Male") Color(0xFF059669)
+                                else Color(0xFFDB2777),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                 }
 
-                // Patient Info
+                // Registration Date
                 Column(
+                    horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = "${patient.firstname} ${patient.lastname}",
-                        fontFamily = rajdhani,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = Color(0xFF1A1A1A),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        text = "Registered",
+                        fontFamily = quicksand,
+                        fontSize = 10.sp,
+                        color = Color(0xFF9CA3AF)
                     )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "ID: ${patient.unique}",
-                            fontFamily = quicksand,
-                            fontSize = 12.sp,
-                            color = Color(0xFF6B7280)
-                        )
-                        Text(
-                            text = "•",
-                            color = Color(0xFF9CA3AF)
-                        )
-                        Text(
-                            text = calculateAge(patient.dob),
-                            fontFamily = quicksand,
-                            fontSize = 12.sp,
-                            color = Color(0xFF6B7280)
-                        )
-                    }
-                    // Gender Badge
-                    Surface(
-                        color = if (patient.gender == "Male") Color(0xFFDCFCE7)
-                        else Color(0xFFFCE7F3),
-                        shape = RoundedCornerShape(4.dp)
-                    ) {
-                        Text(
-                            text = patient.gender,
-                            fontFamily = quicksand,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = if (patient.gender == "Male") Color(0xFF059669)
-                            else Color(0xFFDB2777),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
+                    Text(
+                        text = formatDate(patient.reg_date),
+                        fontFamily = quicksand,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF6B7280)
+                    )
                 }
             }
 
-            // Registration Date
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            // Divider
+            HorizontalDivider(
+                thickness = 1.dp,
+                color = Color(0xFFF3F4F6)
+            )
+
+            // Action Buttons
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = "Registered",
-                    fontFamily = quicksand,
-                    fontSize = 10.sp,
-                    color = Color(0xFF9CA3AF)
-                )
-                Text(
-                    text = formatDate(patient.reg_date),
-                    fontFamily = quicksand,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFF6B7280)
-                )
+                // Record Vitals Button (Primary Action)
+                Button(
+                    onClick = onRecordVitals,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF006A72)
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(vertical = 12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MonitorHeart,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Record Vitals",
+                        fontFamily = quicksand,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp
+                    )
+                }
+
+                // View Details Button (Secondary Action)
+                OutlinedButton(
+                    onClick = onViewDetails,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color(0xFF006A72)
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        Color(0xFF006A72)
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(vertical = 12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Visibility,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "View Details",
+                        fontFamily = quicksand,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp
+                    )
+                }
             }
         }
     }
