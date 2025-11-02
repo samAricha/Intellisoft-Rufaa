@@ -19,6 +19,8 @@
   <img src="screenshots/screenshot4.jpeg" alt="Patient Records" width="200"/>
   <img src="screenshots/screenshot5.jpeg" alt="Dashboard" width="200"/>
   <img src="screenshots/screenshot6.jpeg" alt="Patient Details" width="200"/>
+  <img src="screenshots/screenshot7.jpeg" alt="Additional Feature 1" width="200"/>
+  <img src="screenshots/screenshot8.jpeg" alt="Additional Feature 2" width="200"/>
 </div>
 
 ## ✨ Features
