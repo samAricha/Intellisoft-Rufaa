@@ -8,9 +8,12 @@ const val To_MAIN_GRAPH_ROUTE = "to_main_graph_route"
 
 sealed class AppScreens(val route: String, val title: String? = null) {
 
-    object HomeScreen : AppScreens(route = "home_screen")
 
     //auth screens
     object LoginScreen : AppScreens(route = "login_screen")
+
+    object HomeScreen : AppScreens(route = "home_screen")
+
+    object PatientsListScreen : AppScreens(route = "patients_list_screen")
 
 }

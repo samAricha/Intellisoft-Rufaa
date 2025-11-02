@@ -8,4 +8,9 @@ object AppEndpoints {
     // Auth
     const val SIGN_IN = "user/signin"
 
+    // Patient endpoints
+    const val PATIENTS_VIEW = "patients/view"
+    const val PATIENT_DETAILS = "patients/show/"
+    const val PATIENTS_REGISTER = "patients/register"
+
 }

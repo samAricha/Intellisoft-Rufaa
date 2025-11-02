@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.teka.rufaa.core.navigation.AppScreens
 
 /**
  * Home screen composable - Main navigation hub for the app
@@ -111,7 +112,7 @@ fun HomeScreen(
                     Color(0xFF66BB6A),
                     Color(0xFF4CAF50)
                 ),
-                onClick = {  }
+                onClick = { navController.navigate("patient_registration") }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -125,7 +126,7 @@ fun HomeScreen(
                     Color(0xFF42A5F5),
                     Color(0xFF2196F3)
                 ),
-                onClick = {}
+                onClick = {navController.navigate(AppScreens.PatientsListScreen.route)}
             )
 
             Spacer(modifier = Modifier.height(16.dp))

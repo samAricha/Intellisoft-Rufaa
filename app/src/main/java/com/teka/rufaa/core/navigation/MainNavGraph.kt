@@ -8,6 +8,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.teka.rufaa.modules.auth_module.login.LoginScreen
 import com.teka.rufaa.modules.home.HomeScreen
+import com.teka.rufaa.modules.patient_details.PatientDetailScreen
+import com.teka.rufaa.modules.patient_registration.PatientRegistrationScreen
+import com.teka.rufaa.modules.patients_list.PatientsListScreen
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -33,6 +36,27 @@ fun MainNavGraph(
             }
 
         )
+
+        composable(
+            route = AppScreens.PatientsListScreen.route,
+            enterTransition = ScreenTransitions.enterTransition,
+            exitTransition = ScreenTransitions.exitTransition,
+            popEnterTransition = ScreenTransitions.popEnterTransition,
+            popExitTransition = ScreenTransitions.popExitTransition,
+            content = {
+                PatientsListScreen(navigator = navController)
+            }
+
+        )
+
+        composable("patient_detail/{patientId}") { backStackEntry ->
+            val patientId = backStackEntry.arguments?.getString("patientId")?.toIntOrNull() ?: 0
+            PatientDetailScreen(patientId = patientId, navigator = navController)
+        }
+
+        composable("patient_registration") {
+            PatientRegistrationScreen(navigator = navController)
+        }
 
 
 

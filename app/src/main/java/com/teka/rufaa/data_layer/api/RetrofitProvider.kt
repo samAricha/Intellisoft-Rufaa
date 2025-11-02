@@ -50,19 +50,3 @@ object RetrofitProvider {
 }
 
 
-////usage
-
-/*
-// GET request
-val response = apiService.get(
-    url = "users/profile",
-    queryParams = mapOf("id" to "123")
-)
-
-// POST request
-val response = apiService.post(
-    url = "users/update",
-    body = mapOf("name" to "John", "age" to 30)
-)
-*/
-
