@@ -8,7 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -63,7 +63,7 @@ fun LoginScreen(
     val dialogController = LocalDialogController.current
     val scrollState = rememberScrollState()
 
-    val roleOptions = listOf("Admin", "CM", "Agent", "Loader", "Field Officer")
+    val demoUserOptions = viewModel.demoUsers.map { it.name }
     var isPasswordOpen by remember { mutableStateOf(false) }
 
     val hostState = remember { SnackbarHostState() }
@@ -83,8 +83,6 @@ fun LoginScreen(
         onClearSuccess = { viewModel.clearSuccess() }
     )
 
-
-
     if (dialogController.showDialog.value) {
         InputDialogWidget(
             title = "Change link",
@@ -101,16 +99,13 @@ fun LoginScreen(
         )
     }
 
-
-
-    //screen validators
-    val mobileValidator: (String) -> String? = { value ->
+    // Screen validators
+    val emailValidator: (String) -> String? = { value ->
         when {
-            value.isBlank() -> "Mobile number is required"
-            value.length < 10 -> "Mobile number must be at least 10 digits"
-            !value.all { it.isDigit() } -> "Mobile number must contain only digits"
+            value.isBlank() -> "Email is required"
+            !android.util.Patterns.EMAIL_ADDRESS.matcher(value).matches() -> "Invalid email format"
             else -> {
-                viewModel.clearFieldError("mobile")
+                viewModel.clearFieldError("email")
                 null
             }
         }
@@ -126,14 +121,6 @@ fun LoginScreen(
             }
         }
     }
-
-    val userRoleValidator: (String) -> String? = { value ->
-        if (value.isBlank()) "Please select a role" else {
-            viewModel.clearFieldError("role")
-            null
-        }
-    }
-
 
     Scaffold(
         snackbarHost = { CustomSnackbarHost(hostState = snackbarManager.hostState) },
@@ -202,13 +189,16 @@ fun LoginScreen(
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
 
+                    // Demo User Dropdown
                     CustomDropDown3(
-                        labelText = "Select Role",
-                        options = roleOptions,
-                        selectedValue = uiState.role?:"",
-                        onValueChange = {it -> viewModel.updateUiState { copy(role = it) } },
-                        onOptionSelected = {it -> viewModel.updateUiState { copy(role = it) }},//this can be empty i.e {}, used both of these two bcs of complex objects support
-                        onValidate = userRoleValidator,
+                        labelText = "Demo Users (Optional)",
+                        options = demoUserOptions,
+                        selectedValue = uiState.selectedDemoUser ?: "",
+                        onValueChange = { },
+                        onOptionSelected = { userName ->
+                            viewModel.selectDemoUser(userName)
+                        },
+                        onValidate = { null }, // No validation needed for optional field
                         optionTextProvider = { option ->
                             Text(
                                 text = option,
@@ -216,31 +206,30 @@ fun LoginScreen(
                                 fontWeight = FontWeight.Medium
                             )
                         },
-                        isOptional = false,
-                        enableRealTimeValidation = true,
-                        errorMessage = fieldErrors["role"]
+                        isOptional = true,
+                        enableRealTimeValidation = false,
+                        errorMessage = null
                     )
 
-
                     CustomInputTextField2(
-                        labelText = "Mobile Number",
-                        value = uiState.mobile?:"",
-                        onValueChange = { viewModel.updateUiState { copy(mobile = it) } },
-                        onValidate = mobileValidator,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        labelText = "Email",
+                        value = uiState.email ?: "",
+                        onValueChange = { viewModel.updateUiState { copy(email = it) } },
+                        onValidate = emailValidator,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         trailingIcon = {
                             Icon(
-                                imageVector = Icons.Default.Phone,
-                                contentDescription = "Phone",
+                                imageVector = Icons.Default.Email,
+                                contentDescription = "Email",
                                 tint = Color(0xFF6B7280)
                             )
                         },
-                        errorMessage = fieldErrors["mobile"],
+                        errorMessage = fieldErrors["email"],
                     )
 
                     CustomInputTextField2(
                         labelText = "Password",
-                        value = uiState.password?:"",
+                        value = uiState.password ?: "",
                         onValueChange = { viewModel.updateUiState { copy(password = it) } },
                         onValidate = passwordValidator,
                         visualTransformation = if (isPasswordOpen) VisualTransformation.None else PasswordVisualTransformation(),
@@ -267,9 +256,8 @@ fun LoginScreen(
                     Button(
                         onClick = {
                             viewModel.validateAndSubmitSimple(
-                                uiState.mobile to mobileValidator,
-                                uiState.password to passwordValidator,
-                                uiState.role to userRoleValidator
+                                uiState.email to emailValidator,
+                                uiState.password to passwordValidator
                             )
                         },
                         modifier = Modifier
@@ -356,9 +344,4 @@ fun LoginScreen(
             }
         }
     }
-
-
-
-
-
 }

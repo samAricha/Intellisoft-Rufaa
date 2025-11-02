@@ -10,7 +10,6 @@ import com.teka.rufaa.data_layer.api.RetrofitProvider
 import com.teka.rufaa.data_layer.dtos.SignInDto
 import com.teka.rufaa.data_layer.dtos.SignInResponseDto
 import com.teka.rufaa.data_layer.persistence.DataStoreRepository
-import com.teka.rufaa.utils.converters.toParams
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,17 +20,21 @@ import retrofit2.Response
 import timber.log.Timber
 import javax.inject.Inject
 
+data class DemoUser(
+    val name: String,
+    val email: String,
+    val password: String
+)
 
 data class LoginFormUiState(
-    var role:  String? = null,
-    var mobile: String? = null,
+    var email: String? = null,
     var password: String? = null,
+    var selectedDemoUser: String? = null,
     val isSavingFormData: Boolean = false,
     val errorMessage: String? = null,
     val successMessage: String? = null,
-    val mobileError: String? = null,
-    val passwordError: String? = null,
-    val roleError: String? = null
+    val emailError: String? = null,
+    val passwordError: String? = null
 )
 
 data class LoginState(
@@ -39,13 +42,12 @@ data class LoginState(
     val isLoggedIn: Boolean = false,
 )
 
-
 @HiltViewModel
 class LoginScreenViewModel @Inject constructor(
     private val appContext: Context,
     private val dataStoreRepository: DataStoreRepository
 ) : ViewModel() {
-    // UI state holder
+
     private val _loginFormUiState = MutableStateFlow(LoginFormUiState())
     val loginFormUiState: StateFlow<LoginFormUiState> = _loginFormUiState
 
@@ -55,113 +57,129 @@ class LoginScreenViewModel @Inject constructor(
     private val _loginState = mutableStateOf(LoginState())
     val loginState: State<LoginState> = _loginState
 
-
     private val _baseUrl = MutableStateFlow<String>("")
     val baseUrl: StateFlow<String> = _baseUrl
 
+    // Demo users list
+    val demoUsers = listOf(
+        DemoUser("Japheth Kiprotich", "jkiprotich@intellisoftkenya.com", "123456"),
+        DemoUser("Demo User 2", "demo2@example.com", "password123"),
+        DemoUser("Test User", "test@example.com", "test123")
+    )
 
     init {
         observeBaseUrl()
     }
 
-
     private fun observeBaseUrl() {
         viewModelScope.launch {
             val dataStoreRepository = DataStoreRepository(appContext)
             dataStoreRepository.getBaseUrl.collectLatest { url ->
-                if (url.isEmpty()){
+                if (url.isEmpty()) {
                     dataStoreRepository.saveBaseUrl(AppEndpoints.DEFAULT_BASE_URL)
                 }
                 Timber.tag("BaseUrl").i(url)
                 _baseUrl.value = url
-
             }
         }
     }
 
-    fun onBaseUrlChange(url: String){
+    fun onBaseUrlChange(url: String) {
         _baseUrl.value = url
     }
 
-    fun changeBaseUrl(url: String){
-        viewModelScope.launch{
+    fun changeBaseUrl(url: String) {
+        viewModelScope.launch {
             dataStoreRepository.saveBaseUrl(url)
         }
     }
 
-
-    fun userSignIn(){
-        _loginState.value = loginState.value.copy(isLoading = true)
-        if (true) {
-            Timber.tag("LOGIN").i("all fields are valid")
-            viewModelScope.launch {
-                try {
-                    val apiService = RetrofitProvider.simpleApiService(appContext)
-
-                    val queryParams = SignInDto(
-                        mobile = loginFormUiState.value.mobile!!,
-                        password = loginFormUiState.value.password!!,
-                        category = loginFormUiState.value.role!!
-                    ).toParams().toMap()
-
-                    val response: Response<SignInResponseDto> =
-                        apiService.submitSignInForm(
-                            url = AppEndpoints.SIGN_IN,
-                            params = queryParams
-                        )
-
-                    Timber.tag("LoginVM").i("signInResponse: $response")
-
-                    if (response.isSuccessful) {
-                        Timber.tag("LoginVM")
-                            .i("successful signInResponseBody::: ${response.body()}")
-
-                        val responseBody = response.body()
-                        if (responseBody?.success == 1) {
-                            responseBody.user_data.firstOrNull()?.let { userData ->
-                                dataStoreRepository.saveLoggedInUserData(userData)
-                                updateUiState { copy(successMessage = "Login Successful") }
-                            }
-                        }else if (responseBody?.success == 0){
-                            updateUiState { copy(errorMessage = responseBody.status_desc) }
-                        }
-
-                    } else {
-                        updateUiState { copy(errorMessage = "Login Failed") }
-
-                        when (response.code()) {
-                            503 -> {
-                                Timber.tag("API Call")
-                                    .i("Service Unavailable: No internet connection")
-                            }
-
-                            else -> {
-                                Timber.tag("API Call").e("HTTP error: ${response.code()}")
-                            }
-                        }
-                    }
-
-                    _loginState.value = loginState.value.copy(isLoading = false)
-
-                } catch (e: Exception) {
-                    updateUiState { copy(errorMessage = "Login Failed") }
-                    Timber.tag("LoginVM").i("login failed: ${e.localizedMessage}")
-                    _loginState.value = loginState.value.copy(isLoading = false)
-                }
-
+    fun selectDemoUser(userName: String) {
+        val selectedUser = demoUsers.find { it.name == userName }
+        if (selectedUser != null) {
+            updateUiState {
+                copy(
+                    selectedDemoUser = userName,
+                    email = selectedUser.email,
+                    password = selectedUser.password
+                )
             }
-        }else{
-            Timber.tag("LOGIN").i("some fields are empty")
-            _loginState.value = loginState.value.copy(isLoading = false)
+            clearAllFieldErrors()
         }
     }
 
+    fun userSignIn() {
+        _loginState.value = loginState.value.copy(isLoading = true)
+
+        Timber.tag("LOGIN").i("Starting sign in process")
+        viewModelScope.launch {
+            try {
+                val apiService = RetrofitProvider.simpleApiService(appContext)
+
+                val signInDto = SignInDto(
+                    email = loginFormUiState.value.email!!,
+                    password = loginFormUiState.value.password!!
+                )
+
+                val response: Response<SignInResponseDto> =
+                    apiService.submitSignInForm(
+                        url = AppEndpoints.SIGN_IN, // This should be "user/signin"
+                        body = signInDto
+                    )
+
+                Timber.tag("LoginVM").i("signInResponse: $response")
+
+                if (response.isSuccessful) {
+                    Timber.tag("LoginVM")
+                        .i("successful signInResponseBody::: ${response.body()}")
+
+                    val responseBody = response.body()
+                    if (responseBody?.success == true) {
+                        responseBody.data.let { userData ->
+                            dataStoreRepository.saveLoggedInUserData(userData)
+                            updateUiState {
+                                copy(successMessage = responseBody.message ?: "Login Successful")
+                            }
+                        }
+                    } else {
+                        updateUiState {
+                            copy(errorMessage = responseBody?.message ?: "Login Failed")
+                        }
+                    }
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    updateUiState {
+                        copy(errorMessage = errorBody ?: "Login Failed")
+                    }
+
+                    when (response.code()) {
+                        401 -> {
+                            Timber.tag("API Call").i("Unauthorized: Invalid credentials")
+                        }
+                        503 -> {
+                            Timber.tag("API Call")
+                                .i("Service Unavailable: No internet connection")
+                        }
+                        else -> {
+                            Timber.tag("API Call").e("HTTP error: ${response.code()}")
+                        }
+                    }
+                }
+
+                _loginState.value = loginState.value.copy(isLoading = false)
+
+            } catch (e: Exception) {
+                updateUiState { copy(errorMessage = "Login Failed: ${e.localizedMessage}") }
+                Timber.tag("LoginVM").e("login failed: ${e.localizedMessage}")
+                _loginState.value = loginState.value.copy(isLoading = false)
+            }
+        }
+    }
 
     fun validateAndSubmitSimple(vararg fieldValidators: Pair<String?, (String) -> String?>): Boolean {
-        val fieldNames = listOf("mobile", "password", "role")
+        val fieldNames = listOf("email", "password")
         val newErrors = mutableMapOf<String, String>()
         val errorMessages = mutableListOf<String>()
-
 
         fieldValidators.forEachIndexed { index, (value, validator) ->
             val error = validator(value ?: "")
@@ -184,19 +202,16 @@ class LoginScreenViewModel @Inject constructor(
         }
     }
 
-
-    fun updateUiState(
-        update: LoginFormUiState.() -> LoginFormUiState
-    ) {
+    fun updateUiState(update: LoginFormUiState.() -> LoginFormUiState) {
         _loginFormUiState.update { it.update() }
     }
 
     fun clearError() {
-        updateUiState { copy(errorMessage = null)  }
+        updateUiState { copy(errorMessage = null) }
     }
 
     fun clearSuccess() {
-        updateUiState { copy(successMessage = null)  }
+        updateUiState { copy(successMessage = null) }
     }
 
     fun clearFieldError(fieldName: String) {
