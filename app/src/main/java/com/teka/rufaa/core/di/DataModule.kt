@@ -4,6 +4,10 @@ import android.content.Context
 import androidx.room.Room
 import com.teka.rufaa.data_layer.persistence.DataStoreRepository
 import com.teka.rufaa.data_layer.persistence.room.AppDatabase
+import com.teka.rufaa.data_layer.persistence.room.GeneralAssessmentDao
+import com.teka.rufaa.data_layer.persistence.room.OverweightAssessmentDao
+import com.teka.rufaa.data_layer.persistence.room.PatientDao
+import com.teka.rufaa.data_layer.persistence.room.VitalsDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -38,5 +42,23 @@ object DataModule {
         return database
     }
 
+    @Provides
+    fun providePatientDao(database: AppDatabase): PatientDao {
+        return database.patientDao()
+    }
 
+    @Provides
+    fun provideVitalsDao(database: AppDatabase): VitalsDao {
+        return database.vitalsDao()
+    }
+
+    @Provides
+    fun provideGeneralAssessmentDao(database: AppDatabase): GeneralAssessmentDao {
+        return database.generalAssessmentDao()
+    }
+
+    @Provides
+    fun provideOverweightAssessmentDao(database: AppDatabase): OverweightAssessmentDao {
+        return database.overweightAssessmentDao()
+    }
 }

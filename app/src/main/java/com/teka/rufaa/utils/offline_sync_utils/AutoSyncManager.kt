@@ -31,22 +31,22 @@ class AutoSyncManager @Inject constructor(
      */
     fun startMonitoring() {
         if (isMonitoring) return
-        
+
         isMonitoring = true
         Timber.tag("AutoSync").i("Started monitoring network for auto-sync")
 
         scope.launch {
             var wasDisconnected = false
-            
+
             networkMonitor.isConnected.collectLatest { isConnected ->
                 Timber.tag("AutoSync").i("Network status changed: isConnected=$isConnected")
-                
+
                 if (isConnected && wasDisconnected) {
                     // Network just became available after being disconnected
                     Timber.tag("AutoSync").i("Network reconnected - triggering sync")
                     triggerSync()
                 }
-                
+
                 wasDisconnected = !isConnected
             }
         }
@@ -59,16 +59,16 @@ class AutoSyncManager @Inject constructor(
         try {
             // Check if there's actually unsynced data
             val unsyncedCount = dataSyncService.getUnsyncedCount()
-            
+
             if (unsyncedCount.total == 0) {
                 Timber.tag("AutoSync").i("No unsynced data to sync")
                 return
             }
 
             Timber.tag("AutoSync").i("Starting sync of ${unsyncedCount.total} unsynced items")
-            
+
             val result = dataSyncService.syncAllData()
-            
+
             Timber.tag("AutoSync").i("""
                 Sync completed:
                 - Patients: ${result.patientsSucceeded} succeeded, ${result.patientsFailed} failed
@@ -77,7 +77,7 @@ class AutoSyncManager @Inject constructor(
                 - Overweight Assessments: ${result.overweightAssessmentsSucceeded} succeeded, ${result.overweightAssessmentsFailed} failed
                 Total: ${result.totalSucceeded} succeeded, ${result.totalFailed} failed
             """.trimIndent())
-            
+
         } catch (e: Exception) {
             Timber.tag("AutoSync").e("Error during auto-sync: ${e.localizedMessage}")
         }
@@ -88,7 +88,7 @@ class AutoSyncManager @Inject constructor(
      */
     fun schedulePeriodicSync() {
         val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED) // Fixed: Use WorkManager's NetworkType
             .build()
 
         val syncWorkRequest = PeriodicWorkRequestBuilder<SyncWorker>(
@@ -118,7 +118,7 @@ class AutoSyncManager @Inject constructor(
      */
     fun triggerManualSync() {
         val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED) // Fixed: Use WorkManager's NetworkType
             .build()
 
         val syncWorkRequest = OneTimeWorkRequestBuilder<SyncWorker>()
@@ -149,7 +149,7 @@ class AutoSyncManager @Inject constructor(
     suspend fun getSyncStatus(): SyncStatus {
         val unsyncedCount = dataSyncService.getUnsyncedCount()
         val isConnected = networkMonitor.isCurrentlyConnected()
-        
+
         return SyncStatus(
             isConnected = isConnected,
             unsyncedCount = unsyncedCount.total,
@@ -161,5 +161,5 @@ class AutoSyncManager @Inject constructor(
 data class SyncStatus(
     val isConnected: Boolean,
     val unsyncedCount: Int,
-    val networkType: com.teka.rufaa.utils.network.NetworkType
+    val networkType: com.teka.rufaa.utils.offline_sync_utils.NetworkType // Changed to use your custom NetworkType
 )

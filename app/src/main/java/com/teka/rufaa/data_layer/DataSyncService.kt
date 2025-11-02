@@ -11,6 +11,9 @@ import com.teka.rufaa.modules.patient_registration.PatientRegistrationRequest
 import com.teka.rufaa.modules.patient_registration.PatientRegistrationResponseDto
 import com.teka.rufaa.modules.vitals.VitalsRequest
 import com.teka.rufaa.modules.vitals.VitalsResponseDto
+import com.teka.rufaa.modules.vitals.general_assesment.AssessmentResponseDto
+import com.teka.rufaa.modules.vitals.general_assesment.GeneralAssessmentRequest
+import com.teka.rufaa.modules.vitals.overweight_assesment.OverweightAssessmentRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -40,17 +43,23 @@ class DataSyncService @Inject constructor(
     }
 
     /**
-     * Sync all unsynced data (patients and vitals)
+     * Sync all unsynced data (patients, vitals, and assessments)
      */
     suspend fun syncAllData(): SyncResult {
         val patientResult = syncUnsyncedPatients()
         val vitalsResult = syncUnsyncedVitals()
+        val generalAssessmentResult = syncUnsyncedGeneralAssessments()
+        val overweightAssessmentResult = syncUnsyncedOverweightAssessments()
 
         return SyncResult(
             patientsSucceeded = patientResult.succeeded,
             patientsFailed = patientResult.failed,
             vitalsSucceeded = vitalsResult.succeeded,
-            vitalsFailed = vitalsResult.failed
+            vitalsFailed = vitalsResult.failed,
+            generalAssessmentsSucceeded = generalAssessmentResult.succeeded,
+            generalAssessmentsFailed = generalAssessmentResult.failed,
+            overweightAssessmentsSucceeded = overweightAssessmentResult.succeeded,
+            overweightAssessmentsFailed = overweightAssessmentResult.failed
         )
     }
 
@@ -186,12 +195,154 @@ class DataSyncService @Inject constructor(
     }
 
     /**
+     * Sync unsynced general assessments
+     */
+    suspend fun syncUnsyncedGeneralAssessments(): SyncItemResult {
+        var succeeded = 0
+        var failed = 0
+
+        try {
+            val unsyncedAssessments = generalAssessmentDao.getUnsyncedAssessments()
+            Timber.tag("DataSync").i("Syncing ${unsyncedAssessments.size} unsynced general assessments")
+
+            unsyncedAssessments.forEach { assessment ->
+                try {
+                    val apiService = RetrofitProvider.simpleApiService(appContext)
+
+                    val request = GeneralAssessmentRequest(
+                        visit_date = assessment.visitDate,
+                        general_health = assessment.generalHealth,
+                        on_diet_to_lose_weight = assessment.onDietToLoseWeight,
+                        comments = assessment.comments,
+                        patient_id = assessment.patientId,
+                        form_type = "A"
+                    )
+
+                    val requestBody = json.encodeToString(
+                        GeneralAssessmentRequest.serializer(),
+                        request
+                    ).toRequestBody("application/json".toMediaType())
+
+                    val response = apiService.post(
+                        url = AppEndpoints.VISITS_ADD,
+                        body = requestBody
+                    )
+
+                    if (response.isSuccessful) {
+                        val responseBody = response.body()?.string()
+                        if (responseBody != null) {
+                            val assessmentResponse = json.decodeFromString<AssessmentResponseDto>(responseBody)
+
+                            if (assessmentResponse.success) {
+                                generalAssessmentDao.markAsSynced(
+                                    assessment.id,
+                                    assessmentResponse.data.id,
+                                    assessmentResponse.data.visit_id
+                                )
+                                succeeded++
+                                Timber.tag("DataSync").i("General assessment for patient ${assessment.patientId} synced successfully")
+                            } else {
+                                generalAssessmentDao.updateSyncError(assessment.id, assessmentResponse.message)
+                                failed++
+                            }
+                        }
+                    } else {
+                        val errorBody = response.errorBody()?.string() ?: "Unknown error"
+                        generalAssessmentDao.updateSyncError(assessment.id, errorBody)
+                        failed++
+                    }
+                } catch (e: Exception) {
+                    generalAssessmentDao.updateSyncError(assessment.id, e.localizedMessage)
+                    failed++
+                    Timber.tag("DataSync").e("Error syncing general assessment for patient ${assessment.patientId}: ${e.localizedMessage}")
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("DataSync").e("Error getting unsynced general assessments: ${e.localizedMessage}")
+        }
+
+        return SyncItemResult(succeeded, failed)
+    }
+
+    /**
+     * Sync unsynced overweight assessments
+     */
+    suspend fun syncUnsyncedOverweightAssessments(): SyncItemResult {
+        var succeeded = 0
+        var failed = 0
+
+        try {
+            val unsyncedAssessments = overweightAssessmentDao.getUnsyncedAssessments()
+            Timber.tag("DataSync").i("Syncing ${unsyncedAssessments.size} unsynced overweight assessments")
+
+            unsyncedAssessments.forEach { assessment ->
+                try {
+                    val apiService = RetrofitProvider.simpleApiService(appContext)
+
+                    val request = OverweightAssessmentRequest(
+                        visit_date = assessment.visitDate,
+                        general_health = assessment.generalHealth,
+                        currently_using_drugs = assessment.currentlyUsingDrugs,
+                        comments = assessment.comments,
+                        patient_id = assessment.patientId,
+                        form_type = "B"
+                    )
+
+                    val requestBody = json.encodeToString(
+                        OverweightAssessmentRequest.serializer(),
+                        request
+                    ).toRequestBody("application/json".toMediaType())
+
+                    val response = apiService.post(
+                        url = AppEndpoints.VISITS_ADD,
+                        body = requestBody
+                    )
+
+                    if (response.isSuccessful) {
+                        val responseBody = response.body()?.string()
+                        if (responseBody != null) {
+                            val assessmentResponse = json.decodeFromString<AssessmentResponseDto>(responseBody)
+
+                            if (assessmentResponse.success) {
+                                overweightAssessmentDao.markAsSynced(
+                                    assessment.id,
+                                    assessmentResponse.data.id,
+                                    assessmentResponse.data.visit_id
+                                )
+                                succeeded++
+                                Timber.tag("DataSync").i("Overweight assessment for patient ${assessment.patientId} synced successfully")
+                            } else {
+                                overweightAssessmentDao.updateSyncError(assessment.id, assessmentResponse.message)
+                                failed++
+                            }
+                        }
+                    } else {
+                        val errorBody = response.errorBody()?.string() ?: "Unknown error"
+                        overweightAssessmentDao.updateSyncError(assessment.id, errorBody)
+                        failed++
+                    }
+                } catch (e: Exception) {
+                    overweightAssessmentDao.updateSyncError(assessment.id, e.localizedMessage)
+                    failed++
+                    Timber.tag("DataSync").e("Error syncing overweight assessment for patient ${assessment.patientId}: ${e.localizedMessage}")
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag("DataSync").e("Error getting unsynced overweight assessments: ${e.localizedMessage}")
+        }
+
+        return SyncItemResult(succeeded, failed)
+    }
+
+    /**
      * Get count of unsynced items
      */
     suspend fun getUnsyncedCount(): UnsyncedCount {
         return UnsyncedCount(
             patients = patientDao.getUnsyncedCount(),
-            vitals = vitalsDao.getUnsyncedCount()
+            vitals = vitalsDao.getUnsyncedCount(),
+            generalAssessments = generalAssessmentDao.getUnsyncedCount(),
+            overweightAssessments = overweightAssessmentDao.getUnsyncedCount()
         )
     }
 }
@@ -200,10 +351,16 @@ data class SyncResult(
     val patientsSucceeded: Int,
     val patientsFailed: Int,
     val vitalsSucceeded: Int,
-    val vitalsFailed: Int
+    val vitalsFailed: Int,
+    val generalAssessmentsSucceeded: Int,
+    val generalAssessmentsFailed: Int,
+    val overweightAssessmentsSucceeded: Int,
+    val overweightAssessmentsFailed: Int
 ) {
-    val totalSucceeded: Int get() = patientsSucceeded + vitalsSucceeded
-    val totalFailed: Int get() = patientsFailed + vitalsFailed
+    val totalSucceeded: Int get() = patientsSucceeded + vitalsSucceeded +
+            generalAssessmentsSucceeded + overweightAssessmentsSucceeded
+    val totalFailed: Int get() = patientsFailed + vitalsFailed +
+            generalAssessmentsFailed + overweightAssessmentsFailed
     val allSynced: Boolean get() = totalFailed == 0 && totalSucceeded > 0
 }
 
@@ -214,7 +371,9 @@ data class SyncItemResult(
 
 data class UnsyncedCount(
     val patients: Int,
-    val vitals: Int
+    val vitals: Int,
+    val generalAssessments: Int,
+    val overweightAssessments: Int
 ) {
-    val total: Int get() = patients + vitals
+    val total: Int get() = patients + vitals + generalAssessments + overweightAssessments
 }
